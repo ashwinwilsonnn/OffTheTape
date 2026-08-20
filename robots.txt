@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /approve
+Sitemap: https://off-the-tape.com/sitemap.xml
+Sitemap: https://off-the-tape.com/news-sitemap.xml
