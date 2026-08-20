@@ -69,7 +69,7 @@ async function espn(sportPath, league_key, league) {
   if (!r.ok) throw new Error(`espn ${sportPath} ${r.status}`);
   const data = await r.json();
   const tid = t => resolveTeam(league_key, t && t.location, t && t.displayName, t && t.shortDisplayName, t && t.abbreviation);
-  return (data.events || []).filter(ev => inWindow(ev.date)).map(ev => {
+  const mapped = (data.events || []).filter(ev => inWindow(ev.date)).map(ev => {
     const c = ev.competitions && ev.competitions[0];
     const [h, a] = (c && c.competitors) || [];
     const done = ev.status && ev.status.type && ev.status.type.completed;
@@ -83,6 +83,9 @@ async function espn(sportPath, league_key, league) {
       b_score: done && h ? Number(h.score) : null, sets: null
     };
   });
+  // D-I runs hundreds of matches a week. The board covers the teams we cover:
+  // keep anything involving a tracked team, then cap as a flood guard.
+  return mapped.filter(r => r.a_team || r.b_team).slice(0, 60);
 }
 
 // ---------- LOVB — first-party Payload CMS JSON (schedule; scores arrive via Data Desk) ----------
