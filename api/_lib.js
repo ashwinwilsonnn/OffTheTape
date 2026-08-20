@@ -38,16 +38,31 @@ async function getArticles(status) {
     ph: a.photo_url ? { src: a.photo_url, cr: a.photo_credit || '', link: a.photo_link || null } : null
   }));
 }
+// "TOMORROW" and "FRI, AUG 21" are the same day — collapse both to MM-DD so a hand-entered
+// row and a feed row for the same game dedupe against each other instead of both showing.
+const MON = { JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12 };
+function dayKey(label) {
+  const s = String(label || '').toUpperCase().trim();
+  const p2 = n => String(n).padStart(2, '0');
+  const fmt = d => p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  const ct = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago' }));
+  if (s === 'TODAY' || s === 'TONIGHT') return fmt(ct);
+  if (s === 'TOMORROW') return fmt(new Date(ct.getTime() + 864e5));
+  if (s === 'YESTERDAY') return fmt(new Date(ct.getTime() - 864e5));
+  const m = s.match(/\b([A-Z]{3})[A-Z]*\.?\s+(\d{1,2})\b/);
+  if (m && MON[m[1]]) return p2(MON[m[1]]) + '-' + p2(Number(m[2]));
+  return s;
+}
 async function getMatches() {
   const rows = await supaGet('matches?select=*&order=id.asc');
-  // dedupe: prefer rows with team ids over feed rows for the same day + teams
-  const key = m => m.day_label + '|' + [(m.a_team || m.a_name || '').toLowerCase().slice(0, 4), (m.b_team || m.b_name || '').toLowerCase().slice(0, 4)].sort().join('|');
+  // dedupe: same day + same two teams = one card. Winner is the row that knows the most:
+  // a final score beats a scheduled time, logo-linked beats text-only, feed beats hand entry.
+  const key = m => dayKey(m.day_label) + '|' + [(m.a_team || m.a_name || '').toLowerCase().slice(0, 4), (m.b_team || m.b_name || '').toLowerCase().slice(0, 4)].sort().join('|');
+  const rich = x => (x.status === 'FINAL' ? 8 : 0) + (x.a_team ? 2 : 0) + (x.b_team ? 2 : 0) + (x.source ? 1 : 0);
   const seen = new Map();
   for (const m of rows) {
     const k = key(m); const prev = seen.get(k);
-    if (!prev) { seen.set(k, m); continue; }
-    const rich = (x) => (x.a_team ? 1 : 0) + (x.b_team ? 1 : 0);
-    if (rich(m) > rich(prev)) seen.set(k, m);
+    if (!prev || rich(m) > rich(prev)) seen.set(k, m);
   }
   return [...seen.values()];
 }
