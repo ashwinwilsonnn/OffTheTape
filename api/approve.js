@@ -4,6 +4,31 @@
 // Requires env: APPROVE_PIN + SUPABASE_SERVICE_ROLE_KEY (writes).
 const L = require('./_lib.js');
 
+// RLS on `articles` only exposes published rows to the publishable key, and `desk_log` is
+// editor-only with no public policy at all — so this page reads with the service role.
+// That is also why the drafts list stays invisible to anyone without the PIN.
+const SUPA_URL = process.env.SUPABASE_URL || 'https://vnxbpijpurnizvyeezza.supabase.co';
+async function svcGet(path) {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set — the desk cannot read drafts without it');
+  const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+  if (!r.ok) throw new Error(`supabase ${r.status}: ${await r.text()}`);
+  return r.json();
+}
+// Same normalisation the public pages use, so a draft previews exactly as it will publish.
+async function articles(status) {
+  const rows = await svcGet(`articles?select=*&status=eq.${status}&order=created_at.desc`);
+  return rows.map(a => ({
+    ...a,
+    hRaw: a.h || '',
+    h: L.esc(a.h), dek: a.dek ? L.esc(a.dek) : '', chip: L.esc(a.chip || ''), m: L.esc(a.meta || ''),
+    src: a.src ? L.esc(a.src) : '',
+    body: typeof a.body === 'string' ? JSON.parse(a.body) : a.body,
+    lg: a.league, t1: a.t1 || null, t2: a.t2 || null,
+    ph: a.photo_url ? { src: a.photo_url, cr: L.esc(a.photo_credit || ''), link: a.photo_link || null } : null
+  }));
+}
+
 const shell = (body, tab) => `<main class="apr">
 <div class="hubhd"><h1>THE DESK</h1><div class="sub">EDITOR ONLY · NOTHING PUBLISHES WITHOUT YOU</div></div>
 ${body}</main>`;
@@ -82,7 +107,7 @@ module.exports = async (req, res) => {
     if (tab === 'data') {
       const [feeds, log, matches, players] = await Promise.all([
         L.supaGet('feed_status?select=*'),
-        L.supaGet('desk_log?select=*&order=run_at.desc&limit=120'),
+        svcGet('desk_log?select=*&order=run_at.desc&limit=120').catch(() => []),
         L.getMatches(),
         L.supaGet('player_stats?select=id,name,team_id,league,stat_line&order=name.asc&limit=200').catch(() => [])
       ]);
@@ -110,7 +135,7 @@ ${other.length ? `<div class="sect" style="font-size:15px">NOTES FROM THE DESKS<
       return L.ok(res, P(shell(body, tab)), 0);
     }
 
-    const [drafts, pub] = await Promise.all([L.getArticles('draft'), L.getArticles('published')]);
+    const [drafts, pub] = await Promise.all([articles('draft'), articles('published')]);
     L.R.setCtx({ articles: pub, matches: [] });
     const u = (a, act) => q(`&action=${act}&id=${encodeURIComponent(a.id)}`);
     const body = `${nav}${notice}
