@@ -28,7 +28,7 @@ const up = s => String(s || '').toUpperCase();
 
 // ---------- team resolution: feed names -> our team ids, so rows carry logos + team-page links ----------
 const TEAMS = DATA.TEAMS || {};
-const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');   // NFD + strip = accents fold away
 const TEAM_INDEX = (() => {
   const idx = {};
   for (const id of Object.keys(TEAMS)) {
