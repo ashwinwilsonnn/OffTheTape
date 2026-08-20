@@ -1,17 +1,50 @@
 {
   "rewrites": [
-    { "source": "/", "destination": "/api/page-home" },
-    { "source": "/news/:slug", "destination": "/api/page-article?slug=:slug" },
-    { "source": "/hub/:lg", "destination": "/api/page-hub?lg=:lg" },
-    { "source": "/hub/:lg/:tab", "destination": "/api/page-hub?lg=:lg&tab=:tab" },
-    { "source": "/team/:id", "destination": "/api/page-team?id=:id" },
-    { "source": "/scores", "destination": "/api/page-scores" },
-    { "source": "/legal/:k", "destination": "/api/page-legal?k=:k" },
-    { "source": "/approve", "destination": "/api/approve" },
-    { "source": "/sitemap.xml", "destination": "/api/sitemap" },
-    { "source": "/news-sitemap.xml", "destination": "/api/news-sitemap" }
+    {
+      "source": "/",
+      "destination": "/api/page-home"
+    },
+    {
+      "source": "/news/:slug",
+      "destination": "/api/page-article?slug=:slug"
+    },
+    {
+      "source": "/hub/:lg",
+      "destination": "/api/page-hub?lg=:lg"
+    },
+    {
+      "source": "/hub/:lg/:tab",
+      "destination": "/api/page-hub?lg=:lg&tab=:tab"
+    },
+    {
+      "source": "/team/:id",
+      "destination": "/api/page-team?id=:id"
+    },
+    {
+      "source": "/scores",
+      "destination": "/api/page-scores"
+    },
+    {
+      "source": "/legal/:k",
+      "destination": "/api/page-legal?k=:k"
+    },
+    {
+      "source": "/approve",
+      "destination": "/api/approve"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
+    },
+    {
+      "source": "/news-sitemap.xml",
+      "destination": "/api/sitemap?n=1"
+    }
   ],
   "crons": [
-    { "path": "/api/cron-espn", "schedule": "0 12 * * *" }
+    {
+      "path": "/api/cron-espn",
+      "schedule": "0 12 * * *"
+    }
   ]
 }
