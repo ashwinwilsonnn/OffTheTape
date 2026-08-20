@@ -1,5 +1,7 @@
 // GET /api/cron-espn — ESPN NCAA W scoreboard poller.
-// PREVIEW MODE until SUPABASE_SERVICE_ROLE_KEY is set in Vercel env.
+// PREVIEW MODE until SUPABASE_SERVICE_ROLE_KEY is set in Vercel env:
+// fetches + parses but writes nothing, returns what it WOULD write.
+// With the key set: replaces feed-sourced ncaaw matches + stamps feed_status.
 const { supaWrite, ok, fail } = require('./_supa.js');
 
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/volleyball/womens-college-volleyball/scoreboard';
@@ -38,6 +40,7 @@ module.exports = async (req, res) => {
     if (!key) {
       return ok(res, { mode: 'preview', note: 'Set SUPABASE_SERVICE_ROLE_KEY in Vercel env to enable writes.', would_write: rows.length, sample: rows.slice(0, 3) }, 0);
     }
+    // Live mode: replace feed-sourced ncaaw rows, keep hand-seeded ones (source is null)
     await supaWrite('matches?league_key=eq.ncaaw&source=eq.espn', 'DELETE', undefined, key);
     if (rows.length) await supaWrite('matches', 'POST', rows, key);
     await supaWrite('feed_status?feed=eq.espn_ncaaw', 'PATCH', { note: `live — last poll wrote ${rows.length} rows`, last_ok: new Date().toISOString() }, key);
