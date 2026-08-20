@@ -2,7 +2,7 @@
 // Each adapter is isolated: a failing feed reports its error and the others still write.
 // Writes rows tagged with `source` so feed data never clobbers hand-entered rows.
 // PREVIEW MODE (no writes) until SUPABASE_SERVICE_ROLE_KEY is set.
-const { supaWrite, ok, fail } = require('./_supa.js');
+const { supaGet, supaWrite, ok, fail } = require('./_supa.js');
 const DATA = require('./_data.js');
 
 const WINDOW_BACK = 3, WINDOW_FWD = 21;   // days of slate we keep on the board
@@ -220,6 +220,18 @@ module.exports = async (req, res) => {
         report[f.key] = { ok: false, error: String(e && e.message || e) };
         if (key) await supaWrite(`feed_status?feed=eq.${f.key}`, 'PATCH', { note: `error — ${String(e && e.message || e).slice(0, 140)}` }, key).catch(() => {});
       }
+    }
+    // Feed keys change over time — this poller replaced one tagged 'espn'. A retired key's rows
+    // would otherwise sit on the board forever as duplicates. Sweep them, but name what was
+    // swept in the report so it is never silent.
+    if (key && !only) {
+      const KEEP = new Set(FEEDS.map(f => f.key).concat(['datadesk', 'avp_manual']));
+      try {
+        const rows = await supaGet('matches?select=source');
+        const retired = [...new Set(rows.map(r => r.source).filter(s => s && !KEEP.has(s)))];
+        for (const s of retired) await supaWrite(`matches?source=eq.${encodeURIComponent(s)}`, 'DELETE', undefined, key);
+        report._sweep = retired.length ? `removed rows left by retired feed key(s): ${retired.join(', ')}` : 'no retired feed rows';
+      } catch (e) { report._sweep = `sweep skipped — ${String(e && e.message || e)}`; }
     }
     ok(res, { mode: key ? 'live' : 'preview', feeds: report }, 0);
   } catch (e) { fail(res, e); }
