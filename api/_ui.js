@@ -1,5 +1,114 @@
 // OFF THE TAPE — client-side chrome: ticker drag, slide-in panel, teams dropdown,
 // search over the embedded index, newsletter signup (real POST to /api/subscribe).
-// Base64-embedded so the inline script survives transport without escaping games.
-const B64 = 'KGZ1bmN0aW9uKCl7CnZhciAkPWZ1bmN0aW9uKHMpe3JldHVybiBkb2N1bWVudC5xdWVyeVNlbGVjdG9yKHMpfTsKdmFyIGRpZT0idGhpcy5jbGFzc0xpc3QuYWRkKCdkZWFkJykiOwoKLyogLS0tLS0tLS0tLSBUSUNLRVI6IGF1dG8tc2Nyb2xsICsgZHJhZyBvbiBib3RoIHBsYXRmb3JtcyAtLS0tLS0tLS0tICovCihmdW5jdGlvbigpewogdmFyIHRrPSQoJyN0aWNrJyksdHI9JCgnI3RrdCcpOwogaWYoIXRrfHwhdHIpcmV0dXJuOwogdmFyIHJtPW1hdGNoTWVkaWEoJyhwcmVmZXJzLXJlZHVjZWQtbW90aW9uOiByZWR1Y2UpJykubWF0Y2hlczsKIHZhciBhdXRvPSFybSx0bXI9bnVsbCxkcmFnPWZhbHNlLHN4PTAsc2w9MCxtb3ZlZD0wOwogdmFyIGhhbGY9ZnVuY3Rpb24oKXtyZXR1cm4gdHIuc2Nyb2xsV2lkdGgvMn07CiBmdW5jdGlvbiBsb29wKCl7aWYoYXV0byYmIWRyYWcpe3RrLnNjcm9sbExlZnQrPTAuNTU7aWYodGsuc2Nyb2xsTGVmdD49aGFsZigpKXRrLnNjcm9sbExlZnQtPWhhbGYoKX1yZXF1ZXN0QW5pbWF0aW9uRnJhbWUobG9vcCl9CiB2YXIgcGF1c2U9ZnVuY3Rpb24oKXthdXRvPWZhbHNlO2NsZWFyVGltZW91dCh0bXIpO3Rtcj1zZXRUaW1lb3V0KGZ1bmN0aW9uKCl7aWYoIXJtKWF1dG89dHJ1ZX0sMzAwMCl9OwogdGsuYWRkRXZlbnRMaXN0ZW5lcigncG9pbnRlcmRvd24nLGZ1bmN0aW9uKGUpe2lmKGUucG9pbnRlclR5cGUhPT0nbW91c2UnKXJldHVybiBwYXVzZSgpO2RyYWc9dHJ1ZTttb3ZlZD0wO3N4PWUuY2xpZW50WDtzbD10ay5zY3JvbGxMZWZ0O3RrLmNsYXNzTGlzdC5hZGQoJ2RyYWdnaW5nJyk7cGF1c2UoKX0pOwogYWRkRXZlbnRMaXN0ZW5lcigncG9pbnRlcm1vdmUnLGZ1bmN0aW9uKGUpe2lmKGRyYWcpe3ZhciBkeD1lLmNsaWVudFgtc3g7bW92ZWQ9TWF0aC5tYXgobW92ZWQsTWF0aC5hYnMoZHgpKTt0ay5zY3JvbGxMZWZ0PXNsLWR4fX0pOwogYWRkRXZlbnRMaXN0ZW5lcigncG9pbnRlcnVwJyxmdW5jdGlvbigpe2lmKGRyYWcpe2RyYWc9ZmFsc2U7dGsuY2xhc3NMaXN0LnJlbW92ZSgnZHJhZ2dpbmcnKTtwYXVzZSgpfX0pOwogdGsuYWRkRXZlbnRMaXN0ZW5lcignY2xpY2snLGZ1bmN0aW9uKGUpe2lmKG1vdmVkPjgpe2UucHJldmVudERlZmF1bHQoKTtlLnN0b3BQcm9wYWdhdGlvbigpO21vdmVkPTB9fSx0cnVlKTsKIHRrLmFkZEV2ZW50TGlzdGVuZXIoJ3doZWVsJyxwYXVzZSx7cGFzc2l2ZTp0cnVlfSk7CiB0ay5hZGRFdmVudExpc3RlbmVyKCd0b3VjaHN0YXJ0JyxwYXVzZSx7cGFzc2l2ZTp0cnVlfSk7CiB0ay5hZGRFdmVudExpc3RlbmVyKCd0b3VjaG1vdmUnLHBhdXNlLHtwYXNzaXZlOnRydWV9KTsKIHRrLmFkZEV2ZW50TGlzdGVuZXIoJ3Njcm9sbCcsZnVuY3Rpb24oKXtpZih0ay5zY3JvbGxMZWZ0Pj1oYWxmKCkpdGsuc2Nyb2xsTGVmdC09aGFsZigpO2Vsc2UgaWYodGsuc2Nyb2xsTGVmdDw9MCYmaGFsZigpPjApdGsuc2Nyb2xsTGVmdCs9aGFsZigpfSk7CiByZXF1ZXN0QW5pbWF0aW9uRnJhbWUobG9vcCk7Cn0pKCk7CgovKiAtLS0tLS0tLS0tIFNMSURFLUlOIFBBTkVMIChzZXJ2ZXItcmVuZGVyZWQgbGV2ZWxzLCBKUyBvbmx5IHNsaWRlcyB0aGVtKSAtLS0tLS0tLS0tICovCnZhciBwYW5lbD0kKCcjcGFuZWwnKSxvdj0kKCcjb3YnKTsKZnVuY3Rpb24gcEwxKCl7dmFyIGE9JCgnI3BsMScpLGI9JCgnI3BsMicpO2lmKCFhfHwhYilyZXR1cm47YS5jbGFzc0xpc3QucmVtb3ZlKCdvZmYtbCcpO2IuY2xhc3NMaXN0LmFkZCgnb2ZmLXInKTsKIFtdLmZvckVhY2guY2FsbChkb2N1bWVudC5xdWVyeVNlbGVjdG9yQWxsKCcucGwyJyksZnVuY3Rpb24obil7bi5jbGFzc0xpc3QuYWRkKCdvZmYtcicpfSl9CmZ1bmN0aW9uIHBMMihrKXt2YXIgYT0kKCcjcGwxJyksYj0kKCcjcGwyJyk7aWYoIWF8fCFiKXJldHVybjsKIFtdLmZvckVhY2guY2FsbChkb2N1bWVudC5xdWVyeVNlbGVjdG9yQWxsKCcucGwyJyksZnVuY3Rpb24obil7bi5zdHlsZS5kaXNwbGF5PW4uZ2V0QXR0cmlidXRlKCdkYXRhLWsnKT09PWs/J2Jsb2NrJzonbm9uZSd9KTsKIGEuY2xhc3NMaXN0LmFkZCgnb2ZmLWwnKTtiLmNsYXNzTGlzdC5yZW1vdmUoJ29mZi1yJyl9CmZ1bmN0aW9uIHBPcGVuKCl7aWYoIXBhbmVsKXJldHVybjtwYW5lbC5jbGFzc0xpc3QuYWRkKCdvbicpO292LmNsYXNzTGlzdC5hZGQoJ29uJyk7cEwxKCl9CmZ1bmN0aW9uIHBDbG9zZSgpe2lmKCFwYW5lbClyZXR1cm47cGFuZWwuY2xhc3NMaXN0LnJlbW92ZSgnb24nKTtvdi5jbGFzc0xpc3QucmVtb3ZlKCdvbicpfQp3aW5kb3cucEwxPXBMMTt3aW5kb3cucEwyPXBMMjt3aW5kb3cucENsb3NlPXBDbG9zZTsKaWYoJCgnI2JnJykpJCgnI2JnJykub25jbGljaz1wT3BlbjsKaWYoJCgnI3B4JykpJCgnI3B4Jykub25jbGljaz1wQ2xvc2U7CmlmKG92KW92Lm9uY2xpY2s9cENsb3NlOwoKLyogLS0tLS0tLS0tLSBURUFNUyBEUk9QRE9XTiAoY29udGVudCBzZXJ2ZXItcmVuZGVyZWQsIGhpZGRlbiB1bnRpbCB0b2dnbGVkKSAtLS0tLS0tLS0tICovCnZhciB0ZGQ9JCgnI3RkZCcpOwpmdW5jdGlvbiB0ZGRDbG9zZSgpe2lmKCF0ZGQpcmV0dXJuO3RkZC5jbGFzc0xpc3QucmVtb3ZlKCdvbicpO3ZhciBiPSQoJyN0ZGRidG4nKTtpZihiKWIuY2xhc3NMaXN0LnJlbW92ZSgnb24nKX0KZnVuY3Rpb24gdGRkVG9nZ2xlKCl7aWYoIXRkZClyZXR1cm47aWYodGRkLmNsYXNzTGlzdC5jb250YWlucygnb24nKSlyZXR1cm4gdGRkQ2xvc2UoKTsKIHRkZC5jbGFzc0xpc3QuYWRkKCdvbicpO3ZhciBiPSQoJyN0ZGRidG4nKTtpZihiKWIuY2xhc3NMaXN0LmFkZCgnb24nKX0Kd2luZG93LnRkZENsb3NlPXRkZENsb3NlO3dpbmRvdy50ZGRUb2dnbGU9dGRkVG9nZ2xlOwoKLyogLS0tLS0tLS0tLSBTRUFSQ0ggb3ZlciBhIGNvbXBhY3Qgc2VydmVyLWVtYmVkZGVkIGluZGV4IC0tLS0tLS0tLS0gKi8KdmFyIHN3PSQoJyNzdycpLHNpPSQoJyNzaScpLHNyPSQoJyNzcicpLHNiPSQoJyNzYicpOwp2YXIgSURYPSh3aW5kb3cuT1RUJiZ3aW5kb3cuT1RULmlkeCl8fHthOltdLHQ6W119OwpmdW5jdGlvbiBlc2Mocyl7cmV0dXJuIFN0cmluZyhzKS5yZXBsYWNlKC9bJjw+Il0vZyxmdW5jdGlvbihjKXtyZXR1cm4geycmJzonJmFtcDsnLCc8JzonJmx0OycsJz4nOicmZ3Q7JywnIic6JyZxdW90Oyd9W2NdfSl9CmlmKHNiJiZzdyYmc2kmJnNyKXsKIHNiLm9uY2xpY2s9ZnVuY3Rpb24oKXtzdy5jbGFzc0xpc3QudG9nZ2xlKCdvbicpO2lmKHN3LmNsYXNzTGlzdC5jb250YWlucygnb24nKSlzaS5mb2N1cygpO2Vsc2Ugc3IuaW5uZXJIVE1MPScnfTsKIHNpLm9uaW5wdXQ9ZnVuY3Rpb24oKXsKICB2YXIgcT1zaS52YWx1ZS50cmltKCkudG9Mb3dlckNhc2UoKTsKICBpZihxLmxlbmd0aDwyKXtzci5pbm5lckhUTUw9JycmJnNyLmlubmVySFRNTDtzci5pbm5lckhUTUw9Jyc7cmV0dXJufQogIHZhciBhcj1JRFguYS5maWx0ZXIoZnVuY3Rpb24oYSl7cmV0dXJuIChhLmgrJyAnK2EuYykudG9Mb3dlckNhc2UoKS5pbmRleE9mKHEpPj0wfSkuc2xpY2UoMCw1KQogICAubWFwKGZ1bmN0aW9uKGEpe3JldHVybiAnPGEgaHJlZj0iL25ld3MvJytlbmNvZGVVUklDb21wb25lbnQoYS5pKSsnIj48Yj5BUlRJQ0xFPC9iPiDigJQgJytlc2MoYS5oKSsnPC9hPid9KTsKICB2YXIgdG09SURYLnQuZmlsdGVyKGZ1bmN0aW9uKHQpe3JldHVybiB0Lm4udG9Mb3dlckNhc2UoKS5pbmRleE9mKHEpPj0wfSkuc2xpY2UoMCw1KQogICAubWFwKGZ1bmN0aW9uKHQpe3JldHVybiAnPGEgaHJlZj0iL3RlYW0vJytlbmNvZGVVUklDb21wb25lbnQodC5pKSsnIj48Yj5URUFNPC9iPiDigJQgJytlc2ModC5uKSsnIMK3ICcrZXNjKHQubCkrJzwvYT4nfSk7CiAgc3IuaW5uZXJIVE1MPWFyLmNvbmNhdCh0bSkuam9pbignJyl8fCc8ZGl2IGNsYXNzPSJub24iPk5PIE1BVENIRVMg4oCUIFRSWSBBIFRFQU0gT1IgTEVBR1VFIE5BTUU8L2Rpdj4nOwogfTsKfQoKLyogLS0tLS0tLS0tLSBORVdTTEVUVEVSIFBPUFVQIOKAlCByZWFsIHNpZ251cCwgcG9zdHMgdG8gL2FwaS9zdWJzY3JpYmUgLS0tLS0tLS0tLSAqLwp2YXIgbmxvdj0kKCcjbmxvdicpOwpmdW5jdGlvbiBubENsb3NlKCl7aWYobmxvdilubG92LmNsYXNzTGlzdC5yZW1vdmUoJ29uJyk7dHJ5e2xvY2FsU3RvcmFnZS5zZXRJdGVtKCdvdHRfbmwnLCcxJyl9Y2F0Y2goZSl7fX0Kd2luZG93Lm5sQ2xvc2U9bmxDbG9zZTsKaWYobmxvdil7CiBpZigkKCcjbmx4JykpJCgnI25seCcpLm9uY2xpY2s9bmxDbG9zZTsKIGlmKCQoJyNubG5vJykpJCgnI25sbm8nKS5vbmNsaWNrPW5sQ2xvc2U7CiBubG92LmFkZEV2ZW50TGlzdGVuZXIoJ2NsaWNrJyxmdW5jdGlvbihlKXtpZihlLnRhcmdldD09PW5sb3YpbmxDbG9zZSgpfSk7CiBpZigkKCcjbmxqJykpJCgnI25saicpLm9uY2xpY2s9ZnVuY3Rpb24oKXsKICB2YXIgdj0kKCcjbmxwZScpLnZhbHVlLG9rPSQoJyNubG9rcCcpOwogIG9rLnN0eWxlLmRpc3BsYXk9J2Jsb2NrJzsKICBpZighLy4rQC4rXC4uKy8udGVzdCh2KSl7b2sudGV4dENvbnRlbnQ9J0VOVEVSIEEgVkFMSUQgRU1BSUwgQUREUkVTUy4nO3JldHVybn0KICBvay50ZXh0Q29udGVudD0nU0lHTklORyBZT1UgVVDigKYnOwogIGZldGNoKCcvYXBpL3N1YnNjcmliZScse21ldGhvZDonUE9TVCcsaGVhZGVyczp7J0NvbnRlbnQtVHlwZSc6J2FwcGxpY2F0aW9uL2pzb24nfSxib2R5OkpTT04uc3RyaW5naWZ5KHtlbWFpbDp2fSl9KQogICAudGhlbihmdW5jdGlvbihyKXtyZXR1cm4gci5va30pCiAgIC50aGVuKGZ1bmN0aW9uKGdvb2QpewogICAgb2sudGV4dENvbnRlbnQ9Z29vZD8nWU9V4oCZUkUgT04gVEhFIExJU1QuIEZJUlNUIE9UVCBBTSBMQU5EUyBPTiBUSEUgTkVYVCBQVUJMSVNISU5HIE1PUk5JTkcuJzonU0lHTlVQIEhJQ0NVUCBPTiBPVVIgU0lERSDigJQgVFJZIEFHQUlOIElOIEEgTUlOVVRFLic7CiAgICBpZihnb29kKXNldFRpbWVvdXQobmxDbG9zZSwyMjAwKTsKICAgfSkKICAgLmNhdGNoKGZ1bmN0aW9uKCl7b2sudGV4dENvbnRlbnQ9J1NJR05VUCBISUNDVVAgT04gT1VSIFNJREUg4oCUIFRSWSBBR0FJTiBJTiBBIE1JTlVURS4nfSk7CiB9OwogdmFyIHNlZW49ZmFsc2U7dHJ5e3NlZW49bG9jYWxTdG9yYWdlLmdldEl0ZW0oJ290dF9ubCcpPT09JzEnfWNhdGNoKGUpe30KIGlmKCFzZWVuJiZsb2NhdGlvbi5wYXRobmFtZS5pbmRleE9mKCduZXdzbGV0dGVyJyk8MClzZXRUaW1lb3V0KGZ1bmN0aW9uKCl7bmxvdi5jbGFzc0xpc3QuYWRkKCdvbicpfSw2MDAwKTsKfQoKLyogLS0tLS0tLS0tLSBJTkxJTkUgTkVXU0xFVFRFUiBTVFJJUCAtLS0tLS0tLS0tICovCnZhciBuc2o9JCgnI25zaicpOwppZihuc2opbnNqLm9uY2xpY2s9ZnVuY3Rpb24oKXsKIHZhciB2PSQoJyNuc2UnKS52YWx1ZSxvaz0kKCcjbnNrJyk7CiBvay5zdHlsZS5kaXNwbGF5PSdibG9jayc7CiBpZighLy4rQC4rXC4uKy8udGVzdCh2KSl7b2sudGV4dENvbnRlbnQ9J0VOVEVSIEEgVkFMSUQgRU1BSUwgQUREUkVTUy4nO3JldHVybn0KIG9rLnRleHRDb250ZW50PSdTSUdOSU5HIFlPVSBVUOKApic7CiBmZXRjaCgnL2FwaS9zdWJzY3JpYmUnLHttZXRob2Q6J1BPU1QnLGhlYWRlcnM6eydDb250ZW50LVR5cGUnOidhcHBsaWNhdGlvbi9qc29uJ30sYm9keTpKU09OLnN0cmluZ2lmeSh7ZW1haWw6dn0pfSkKICAudGhlbihmdW5jdGlvbihyKXtyZXR1cm4gci5va30pCiAgLnRoZW4oZnVuY3Rpb24oZ29vZCl7b2sudGV4dENvbnRlbnQ9Z29vZD8nWU9V4oCZUkUgT04gVEhFIExJU1Qg8J+kmSc6J1NJR05VUCBISUNDVVAg4oCUIFRSWSBBR0FJTiBJTiBBIE1JTlVURS4nfSkKICAuY2F0Y2goZnVuY3Rpb24oKXtvay50ZXh0Q29udGVudD0nU0lHTlVQIEhJQ0NVUCDigJQgVFJZIEFHQUlOIElOIEEgTUlOVVRFLid9KTsKfTsKCi8qIC0tLS0tLS0tLS0gTU9TVCBSRUFEIENBUk9VU0VMIC0tLS0tLS0tLS0gKi8Kd2luZG93Lm1yU2Nyb2xsPWZ1bmN0aW9uKGR4KXt2YXIgbT0kKCcjbXInKTtpZihtKW0uc2Nyb2xsQnkoe2xlZnQ6ZHgsYmVoYXZpb3I6J3Ntb290aCd9KX07CgovKiAtLS0tLS0tLS0tIEVTQyBjbG9zZXMgZXZlcnl0aGluZyAtLS0tLS0tLS0tICovCmRvY3VtZW50LmFkZEV2ZW50TGlzdGVuZXIoJ2tleWRvd24nLGZ1bmN0aW9uKGUpewogaWYoZS5rZXk9PT0nRXNjYXBlJyl7bmxDbG9zZSgpO3BDbG9zZSgpO2lmKHN3KXN3LmNsYXNzTGlzdC5yZW1vdmUoJ29uJyk7dGRkQ2xvc2UoKX0KfSk7Cn0pKCk7Cg==';
-module.exports = Buffer.from(B64, 'base64').toString('utf8');
+// Written as an ordinary function and serialised with toString() at require time, so the
+// browser payload stays plain readable JavaScript in the repo — diffable, no escaping games.
+function ui() {
+var $=function(s){return document.querySelector(s)};
+var die="this.classList.add('dead')";
+
+/* ---------- TICKER: auto-scroll + drag on both platforms ---------- */
+(function(){
+ var tk=$('#tick'),tr=$('#tkt');
+ if(!tk||!tr)return;
+ var rm=matchMedia('(prefers-reduced-motion: reduce)').matches;
+ var auto=!rm,tmr=null,drag=false,sx=0,sl=0,moved=0;
+ var half=function(){return tr.scrollWidth/2};
+ function loop(){if(auto&&!drag){tk.scrollLeft+=0.55;if(tk.scrollLeft>=half())tk.scrollLeft-=half()}requestAnimationFrame(loop)}
+ var pause=function(){auto=false;clearTimeout(tmr);tmr=setTimeout(function(){if(!rm)auto=true},3000)};
+ tk.addEventListener('pointerdown',function(e){if(e.pointerType!=='mouse')return pause();drag=true;moved=0;sx=e.clientX;sl=tk.scrollLeft;tk.classList.add('dragging');pause()});
+ addEventListener('pointermove',function(e){if(drag){var dx=e.clientX-sx;moved=Math.max(moved,Math.abs(dx));tk.scrollLeft=sl-dx}});
+ addEventListener('pointerup',function(){if(drag){drag=false;tk.classList.remove('dragging');pause()}});
+ tk.addEventListener('click',function(e){if(moved>8){e.preventDefault();e.stopPropagation();moved=0}},true);
+ tk.addEventListener('wheel',pause,{passive:true});
+ tk.addEventListener('touchstart',pause,{passive:true});
+ tk.addEventListener('touchmove',pause,{passive:true});
+ tk.addEventListener('scroll',function(){if(tk.scrollLeft>=half())tk.scrollLeft-=half();else if(tk.scrollLeft<=0&&half()>0)tk.scrollLeft+=half()});
+ requestAnimationFrame(loop);
+})();
+
+/* ---------- SLIDE-IN PANEL (server-rendered levels, JS only slides them) ---------- */
+var panel=$('#panel'),ov=$('#ov');
+function pL1(){var a=$('#pl1'),b=$('#pl2');if(!a||!b)return;a.classList.remove('off-l');b.classList.add('off-r');
+ [].forEach.call(document.querySelectorAll('.pl2'),function(n){n.classList.add('off-r')})}
+function pL2(k){var a=$('#pl1'),b=$('#pl2');if(!a||!b)return;
+ [].forEach.call(document.querySelectorAll('.pl2'),function(n){n.style.display=n.getAttribute('data-k')===k?'block':'none'});
+ a.classList.add('off-l');b.classList.remove('off-r')}
+function pOpen(){if(!panel)return;panel.classList.add('on');ov.classList.add('on');pL1()}
+function pClose(){if(!panel)return;panel.classList.remove('on');ov.classList.remove('on')}
+window.pL1=pL1;window.pL2=pL2;window.pClose=pClose;
+if($('#bg'))$('#bg').onclick=pOpen;
+if($('#px'))$('#px').onclick=pClose;
+if(ov)ov.onclick=pClose;
+
+/* ---------- TEAMS DROPDOWN (content server-rendered, hidden until toggled) ---------- */
+var tdd=$('#tdd');
+function tddClose(){if(!tdd)return;tdd.classList.remove('on');var b=$('#tddbtn');if(b)b.classList.remove('on')}
+function tddToggle(){if(!tdd)return;if(tdd.classList.contains('on'))return tddClose();
+ tdd.classList.add('on');var b=$('#tddbtn');if(b)b.classList.add('on')}
+window.tddClose=tddClose;window.tddToggle=tddToggle;
+
+/* ---------- SEARCH over a compact server-embedded index ---------- */
+var sw=$('#sw'),si=$('#si'),sr=$('#sr'),sb=$('#sb');
+var IDX=(window.OTT&&window.OTT.idx)||{a:[],t:[]};
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+if(sb&&sw&&si&&sr){
+ sb.onclick=function(){sw.classList.toggle('on');if(sw.classList.contains('on'))si.focus();else sr.innerHTML=''};
+ si.oninput=function(){
+  var q=si.value.trim().toLowerCase();
+  if(q.length<2){sr.innerHTML='';return}
+  var ar=IDX.a.filter(function(a){return (a.h+' '+a.c).toLowerCase().indexOf(q)>=0}).slice(0,5)
+   .map(function(a){return '<a href="/news/'+encodeURIComponent(a.i)+'"><b>ARTICLE</b> — '+esc(a.h)+'</a>'});
+  var tm=IDX.t.filter(function(t){return t.n.toLowerCase().indexOf(q)>=0}).slice(0,5)
+   .map(function(t){return '<a href="/team/'+encodeURIComponent(t.i)+'"><b>TEAM</b> — '+esc(t.n)+' · '+esc(t.l)+'</a>'});
+  sr.innerHTML=ar.concat(tm).join('')||'<div class="non">NO MATCHES — TRY A TEAM OR LEAGUE NAME</div>';
+ };
+}
+
+/* ---------- NEWSLETTER POPUP — real signup, posts to /api/subscribe ---------- */
+var nlov=$('#nlov');
+function nlClose(){if(nlov)nlov.classList.remove('on');try{localStorage.setItem('ott_nl','1')}catch(e){}}
+window.nlClose=nlClose;
+if(nlov){
+ if($('#nlx'))$('#nlx').onclick=nlClose;
+ if($('#nlno'))$('#nlno').onclick=nlClose;
+ nlov.addEventListener('click',function(e){if(e.target===nlov)nlClose()});
+ if($('#nlj'))$('#nlj').onclick=function(){
+  var v=$('#nlpe').value,ok=$('#nlokp');
+  ok.style.display='block';
+  if(!/.+@.+\..+/.test(v)){ok.textContent='ENTER A VALID EMAIL ADDRESS.';return}
+  ok.textContent='SIGNING YOU UP…';
+  fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:v})})
+   .then(function(r){return r.ok})
+   .then(function(good){
+    ok.textContent=good?'YOU’RE ON THE LIST. FIRST OTT AM LANDS ON THE NEXT PUBLISHING MORNING.':'SIGNUP HICCUP ON OUR SIDE — TRY AGAIN IN A MINUTE.';
+    if(good)setTimeout(nlClose,2200);
+   })
+   .catch(function(){ok.textContent='SIGNUP HICCUP ON OUR SIDE — TRY AGAIN IN A MINUTE.'});
+ };
+ var seen=false;try{seen=localStorage.getItem('ott_nl')==='1'}catch(e){}
+ if(!seen&&location.pathname.indexOf('newsletter')<0)setTimeout(function(){nlov.classList.add('on')},6000);
+}
+
+/* ---------- INLINE NEWSLETTER STRIP ---------- */
+var nsj=$('#nsj');
+if(nsj)nsj.onclick=function(){
+ var v=$('#nse').value,ok=$('#nsk');
+ ok.style.display='block';
+ if(!/.+@.+\..+/.test(v)){ok.textContent='ENTER A VALID EMAIL ADDRESS.';return}
+ ok.textContent='SIGNING YOU UP…';
+ fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:v})})
+  .then(function(r){return r.ok})
+  .then(function(good){ok.textContent=good?'YOU’RE ON THE LIST 🤝':'SIGNUP HICCUP — TRY AGAIN IN A MINUTE.'})
+  .catch(function(){ok.textContent='SIGNUP HICCUP — TRY AGAIN IN A MINUTE.'});
+};
+
+/* ---------- MOST READ CAROUSEL ---------- */
+window.mrScroll=function(dx){var m=$('#mr');if(m)m.scrollBy({left:dx,behavior:'smooth'})};
+
+/* ---------- ESC closes everything ---------- */
+document.addEventListener('keydown',function(e){
+ if(e.key==='Escape'){nlClose();pClose();if(sw)sw.classList.remove('on');tddClose()}
+});
+}
+
+module.exports = '(' + ui.toString() + ')();';
