@@ -43,7 +43,7 @@
   ],
   "crons": [
     {
-      "path": "/api/cron-espn",
+      "path": "/api/cron-feeds",
       "schedule": "0 12 * * *"
     }
   ]
