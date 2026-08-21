@@ -4,6 +4,7 @@
 const DATA = require('./_data.js');
 const R = require('./_render.js');
 const CSS = require('./_css.js');
+const CSSM = require('./_css_mobile.js');   // responsive refinements, layered after
 const UI = require('./_ui.js');
 const { LEAGUES, TEAMS, CONF, CONFORDER, VNL, POLLW, POLLM, STAND_LOVB, STAND_MLV, VNLW, VNLM, CLASSBOARD, COMMITWIRE } = DATA;
 
@@ -181,7 +182,7 @@ ${ogImage ? `<meta property="og:image" content="${attr(ogImage)}"><meta name="tw
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@900&family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>` : ''}
-${extraHead}<style>${CSS}</style></head><body>
+${extraHead}<style>${CSS}${CSSM}</style></head><body>
 ${header(ctx)}
 ${tick}
 ${panel()}
