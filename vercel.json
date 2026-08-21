@@ -25,6 +25,10 @@
       "destination": "/api/page-scores"
     },
     {
+      "source": "/newsletter",
+      "destination": "/api/subscribe"
+    },
+    {
       "source": "/legal/:k",
       "destination": "/api/page-legal?k=:k"
     },
