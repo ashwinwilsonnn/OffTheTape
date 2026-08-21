@@ -1,35 +1,24 @@
-// PIN-gated editor surface — the one place Ashwin reviews what the desks produced.
+// THE DESK — the one place Ashwin reviews what the desks produced.
 //   /approve            drafts, previewed exactly as they will publish
 //   /approve?tab=data   what the Data Desk changed, feed health, the live board
+//
+// Auth: the PIN is posted once and exchanged for a signed HttpOnly cookie (see _auth.js).
+// It never appears in a URL, so it never reaches browser history, Vercel's request logs, or
+// the Referer header that publishers receive when a source link is clicked.
+//
+// Publishing is a POST carrying a session-bound CSRF token. It used to be a plain GET link,
+// which meant any link-preview scanner, prefetcher or mail scanner that touched the URL
+// could publish an article on its own. Nothing publishes without a deliberate click.
+//
 // Requires env: APPROVE_PIN + SUPABASE_SERVICE_ROLE_KEY (writes).
 const L = require('./_lib.js');
+const A = require('./_auth.js');
 
-// RLS on `articles` only exposes published rows to the publishable key, and `desk_log` is
-// editor-only with no public policy at all — so this page reads with the service role.
-// That is also why the drafts list stays invisible to anyone without the PIN.
-const SUPA_URL = process.env.SUPABASE_URL || 'https://vnxbpijpurnizvyeezza.supabase.co';
-async function svcGet(path) {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set — the desk cannot read drafts without it');
-  const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
-  if (!r.ok) throw new Error(`supabase ${r.status}: ${await r.text()}`);
-  return r.json();
-}
-// Same normalisation the public pages use, so a draft previews exactly as it will publish.
-async function articles(status) {
-  const rows = await svcGet(`articles?select=*&status=eq.${status}&order=created_at.desc`);
-  return rows.map(a => ({
-    ...a,
-    hRaw: a.h || '',
-    h: L.esc(a.h), dek: a.dek ? L.esc(a.dek) : '', chip: L.esc(a.chip || ''), m: L.esc(a.meta || ''),
-    src: a.src ? L.esc(a.src) : '',
-    body: typeof a.body === 'string' ? JSON.parse(a.body) : a.body,
-    lg: a.league, t1: a.t1 || null, t2: a.t2 || null,
-    ph: a.photo_url ? { src: a.photo_url, cr: L.esc(a.photo_credit || ''), link: a.photo_link || null } : null
-  }));
-}
+const S = require('./_svc.js');
+const svcGet = S.svcGet;
+const articles = S.byStatus;
 
-const shell = (body, tab) => `<main class="apr">
+const shell = body => `<main class="apr">
 <div class="hubhd"><h1>THE DESK</h1><div class="sub">EDITOR ONLY · NOTHING PUBLISHES WITHOUT YOU</div></div>
 ${body}</main>`;
 
@@ -48,15 +37,16 @@ function readAs(a) {
   return `<div class="abody" style="max-width:none;font-size:14px">${a.dek ? `<p class="dek" style="font-size:15px">${a.dek}</p>` : ''}${open}
   ${rest ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:var(--mut)">READ THE REST (${paras.length - 2} MORE)</summary><div style="margin-top:10px">${rest}</div></details>` : ''}</div>`;
 }
-function draftCard(a, u) {
-  const src = (a.sources || []).map(s => `<a href="${L.attr(s.url)}" target="_blank" rel="noopener" style="display:block;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink2);padding:1px 0">↗ ${L.esc(s.name)}</a>`).join('');
+function draftCard(a, csrf) {
+  const src = (a.sources || []).map(s => `<a href="${L.attr(s.url)}" target="_blank" rel="noopener noreferrer" style="display:block;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink2);padding:1px 0">↗ ${L.esc(s.name)}</a>`).join('');
   const photo = a.ph
-    ? `PHOTO · ${L.esc(a.ph.cr || 'linked')}${a.ph.link ? ` · <a href="${L.attr(a.ph.link)}" target="_blank" rel="noopener" style="color:var(--ink2);text-decoration:underline">see the post</a>` : ''}`
+    ? `PHOTO · ${L.esc(a.ph.cr || 'linked')}${a.ph.link ? ` · <a href="${L.attr(a.ph.link)}" target="_blank" rel="noopener noreferrer" style="color:var(--ink2);text-decoration:underline">see the post</a>` : ''}`
     : `GRAPHIC COVER · FAMILY ${L.esc(a.fam || '01')}`;
   // Anything that would embarrass us in public gets called out before the publish button.
   const flags = [];
   if (a.ph && !a.ph.link) flags.push('photo has no link back to the original post — the click-through contract needs it');
   if (a.ph && /demo/i.test(a.ph.cr || '')) flags.push('photo credit still says DEMO — rewrite it as “VIA @account · PLATFORM”');
+  if (a.ph && !L.R.imgHostOK(a.ph.src)) flags.push('photo host is not in the image pipeline — it will load full-size. Add it to IMG_HOSTS and vercel.json to fix.');
   if (!a.ph && !['05', '03', '07a', '09'].includes(a.fam || '')) flags.push('no photo and a plain graphic cover — check whether a real one exists');
   if (!(a.sources || []).length) flags.push('no sources attached');
   if (!a.dek) flags.push('no dek');
@@ -70,43 +60,107 @@ function draftCard(a, u) {
       ${flagbox}
       ${readAs(a)}
       ${src ? `<div style="margin-top:10px;border-left:3px solid var(--red);padding-left:10px">${src}</div>` : ''}
-      <div class="btns" style="margin-top:14px"><a class="pub" href="${u(a, 'publish')}">✓ PUBLISH</a><a class="rej" href="${u(a, 'reject')}">✕ REJECT</a>
-      <a class="rej" style="background:transparent;border:1px solid var(--ln);color:var(--ink2)" href="/news/${L.attr(a.id)}" target="_blank">PREVIEW PAGE ↗</a></div>
+      <div class="btns" style="margin-top:14px">
+        <form method="POST" action="/approve">
+          <input type="hidden" name="csrf" value="${L.attr(csrf)}">
+          <input type="hidden" name="id" value="${L.attr(a.id)}">
+          <button class="pub" name="action" value="publish" type="submit">✓ PUBLISH</button>
+          <button class="rej" name="action" value="reject" type="submit">✕ REJECT</button>
+        </form>
+        <a class="rej ghost" href="/news/${L.attr(a.id)}" target="_blank">PREVIEW PAGE ↗</a>
+      </div>
     </div>
   </div>
 </div>
 <style>@media(max-width:720px){.card>div{grid-template-columns:1fr!important}}</style>`;
 }
 
+// Desk-only chrome. It lives here rather than in _css.js so readers never download the
+// stylesheet for a page they will never see.
+const DESKCSS = `<style>
+.apr .btns a,.apr .btns button{font-family:'Roboto Slab',serif;font-weight:900;text-transform:uppercase;font-size:12px;padding:9px 16px;border-radius:6px;border:none;cursor:pointer;line-height:1.25;display:inline-block}
+.apr .btns form{display:flex;gap:10px;margin:0}
+.apr .drow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.apr .ghost{background:transparent;border:1px solid var(--ln);color:var(--ink2)}
+</style>`;
+
+const P = body => L.page({
+  title: 'The Desk — OTT', desc: '', canonical: L.SITE, ctx: {}, body, noindex: true,
+  extraHead: DESKCSS,
+  // this is a working surface, not a reader page: kill the signup popup
+  extraJs: "try{localStorage.setItem('ott_nl','1')}catch(e){};var _n=document.getElementById('nlov');if(_n)_n.remove();"
+});
+
+function loginPage(res, wrong) {
+  return L.ok(res, P(shell(`<form method="POST" action="/approve" style="display:flex;gap:10px;margin-top:20px">
+  <input type="password" name="pin" placeholder="PIN" autofocus autocomplete="current-password"><button type="submit">ENTER</button></form>
+  ${wrong ? '<div class="warnbox">Wrong PIN.</div>' : ''}
+  <p style="color:var(--mut);font-size:11.5px;margin-top:14px;max-width:52ch">Signing in sets a 30-day cookie on this browser. The PIN is never put in a link, so it can't leak through history, logs or referrers.</p>`)), 0);
+}
+function seeOther(res, to) { res.statusCode = 303; res.setHeader('Location', to); res.setHeader('Cache-Control', 'no-store'); return res.end ? res.end() : res.send(''); }
+
 module.exports = async (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-store');
-    res.setHeader('X-Robots-Tag', 'noindex');
-    const pin = String(req.query.pin || '');
-    const configured = process.env.APPROVE_PIN;
-    const P = b => L.page({ title: 'The Desk — OTT', desc: '', canonical: L.SITE, ctx: {}, body: b,
-      // this is a working surface, not a reader page: kill the signup popup
-      extraJs: "try{localStorage.setItem('ott_nl','1')}catch(e){};var _n=document.getElementById('nlov');if(_n)_n.remove();" });
-    if (!configured) return L.ok(res, P(shell(`<div class="warnbox">Not configured yet: add an <b>APPROVE_PIN</b> environment variable in Vercel, redeploy, and this page comes alive.</div>`)), 0);
-    if (pin !== configured) {
-      return L.ok(res, P(shell(`<form method="GET" action="/approve" style="display:flex;gap:10px;margin-top:20px"><input type="password" name="pin" placeholder="PIN" autofocus><button type="submit">ENTER</button></form>${pin ? '<div class="warnbox">Wrong PIN.</div>' : ''}`)), 0);
-    }
-    const tab = String(req.query.tab || '');
-    const action = String(req.query.action || '');
-    const id = String(req.query.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
-    const q = extra => `/approve?pin=${encodeURIComponent(pin)}${extra || ''}`;
-    let notice = '';
-    if (action && id) {
-      if (action === 'publish') { await L.supaWrite(`articles?id=eq.${id}`, 'PATCH', { status: 'published', published_at: new Date().toISOString() }); notice = `<div class="notice">Published: ${L.esc(id)} — live within a minute.</div>`; }
-      else if (action === 'reject') { await L.supaWrite(`articles?id=eq.${id}`, 'PATCH', { status: 'rejected' }); notice = `<div class="notice">Rejected: ${L.esc(id)}.</div>`; }
-      else if (action === 'unpublish') { await L.supaWrite(`articles?id=eq.${id}`, 'PATCH', { status: 'draft' }); notice = `<div class="notice">Unpublished: ${L.esc(id)} — back to drafts.</div>`; }
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    if (!process.env.APPROVE_PIN) {
+      return L.ok(res, P(shell(`<div class="warnbox">Not configured yet: add an <b>APPROVE_PIN</b> environment variable in Vercel, redeploy, and this page comes alive.</div>`)), 0);
     }
 
-    const nav = `<div class="dnav" style="margin:18px 0 4px"><a class="${tab ? '' : 'on'}" href="${q()}">DRAFTS</a><a class="${tab === 'data' ? 'on' : ''}" href="${q('&tab=data')}">DATA</a></div>`;
+    const method = String(req.method || 'GET').toUpperCase();
+    const form = method === 'POST' ? A.body(req) : {};
+
+    // --- sign in -------------------------------------------------------------
+    if (method === 'POST' && form.pin !== undefined) {
+      if (!A.pinOK(form.pin)) return loginPage(res, true);
+      A.setSession(res);
+      return seeOther(res, '/approve');
+    }
+    // Legacy bookmark: /approve?pin=… still works once — it converts to a cookie and
+    // bounces to a clean URL so the secret stops travelling.
+    if (method === 'GET' && req.query && req.query.pin !== undefined) {
+      if (!A.pinOK(req.query.pin)) return loginPage(res, true);
+      A.setSession(res);
+      return seeOther(res, '/approve');
+    }
+    if (method === 'POST' && form.logout) { A.clearSession(res); return seeOther(res, '/approve'); }
+
+    if (!A.isEditor(req)) return loginPage(res, false);
+    const csrf = A.csrfFor(req);
+
+    // --- state changes: POST only, CSRF-checked ------------------------------
+    if (method === 'POST') {
+      if (!A.csrfOK(req, form.csrf)) return L.ok(res, P(shell('<div class="warnbox">That form was stale — reload the desk and try again.</div>')), 0);
+      const id = String(form.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+      const action = String(form.action || '');
+      if (id && ['publish', 'reject', 'unpublish'].includes(action)) {
+        const patch = action === 'publish' ? { status: 'published', published_at: new Date().toISOString() }
+          : action === 'reject' ? { status: 'rejected' }
+            : { status: 'draft', published_at: null };
+        await L.supaWrite(`articles?id=eq.${id}`, 'PATCH', patch);
+        return seeOther(res, `/approve?done=${action}&id=${encodeURIComponent(id)}`);
+      }
+      return seeOther(res, '/approve');
+    }
+
+    const tab = String((req.query && req.query.tab) || '');
+    const done = String((req.query && req.query.done) || '');
+    const doneId = String((req.query && req.query.id) || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    const notice = done && doneId
+      ? `<div class="notice">${done === 'publish' ? `Published: ${L.esc(doneId)} — live within a minute.`
+        : done === 'reject' ? `Rejected: ${L.esc(doneId)}.`
+          : `Unpublished: ${L.esc(doneId)} — back to drafts.`}</div>`
+      : '';
+
+    const nav = `<div class="drow" style="margin:18px 0 4px;justify-content:space-between">
+  <div class="dnav" style="margin:0"><a class="${tab ? '' : 'on'}" href="/approve">DRAFTS</a><a class="${tab === 'data' ? 'on' : ''}" href="/approve?tab=data">DATA</a></div>
+  <form method="POST" action="/approve" style="margin:0"><input type="hidden" name="csrf" value="${L.attr(csrf)}"><button name="logout" value="1" type="submit" style="background:transparent;border:1px solid var(--ln);color:var(--mut);font-size:10px;padding:7px 12px">SIGN OUT</button></form>
+</div>`;
 
     if (tab === 'data') {
       const [feeds, log, matches, players] = await Promise.all([
-        L.supaGet('feed_status?select=*'),
+        L.supaGet('feed_status?select=*').catch(() => []),
         svcGet('desk_log?select=*&order=run_at.desc&limit=120').catch(() => []),
         L.getMatches(),
         L.supaGet('player_stats?select=id,name,team_id,league,stat_line&order=name.asc&limit=200').catch(() => [])
@@ -115,12 +169,13 @@ module.exports = async (req, res) => {
       const other = log.filter(r => !['change', 'held'].includes(r.kind));
       const when = t => t ? new Date(t).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).toUpperCase() : '—';
       const tbl = (head, rows) => `<div class="tbwrap"><table class="tb"><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr>${rows}</table></div>`;
+      const link = (url, name) => `<a href="${L.attr(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--ink2);text-decoration:underline">${L.esc(name || 'source')}</a>`;
       const body = `${nav}
 ${held.length ? `<div class="warnbox"><b>${held.length} HELD FOR YOUR DECISION</b> — the desk would not write these on its own.</div>
-${tbl(['WHAT', 'CURRENT', 'PROPOSED', 'WHY / SOURCE'], held.map(r => `<tr><td style="font-weight:700">${L.esc(r.entity || '')}</td><td class="fpv">${L.esc(r.before_val || '—')}</td><td class="fpv">${L.esc(r.after_val || '—')}</td><td class="fpv">${L.esc(r.summary || '')}${r.source_url ? ` · <a href="${L.attr(r.source_url)}" target="_blank" rel="noopener" style="color:var(--ink2);text-decoration:underline">${L.esc(r.source_name || 'source')}</a>` : ''}</td></tr>`).join(''))}` : ''}
+${tbl(['WHAT', 'CURRENT', 'PROPOSED', 'WHY / SOURCE'], held.map(r => `<tr><td style="font-weight:700">${L.esc(r.entity || '')}</td><td class="fpv">${L.esc(r.before_val || '—')}</td><td class="fpv">${L.esc(r.after_val || '—')}</td><td class="fpv">${L.esc(r.summary || '')}${r.source_url ? ` · ${link(r.source_url, r.source_name)}` : ''}</td></tr>`).join(''))}` : ''}
 
 <div class="sect" style="font-size:15px">WHAT CHANGED <span class="mr">${chg.length} EDIT${chg.length === 1 ? '' : 'S'} · MOST RECENT FIRST</span></div>
-${chg.length ? tbl(['WHEN', 'WHAT', 'WAS', 'NOW', 'SOURCE'], chg.map(r => `<tr><td class="fpv">${when(r.run_at)}</td><td style="font-weight:700">${L.esc(r.entity || '')}</td><td class="fpv">${L.esc(r.before_val || '—')}</td><td style="color:#9fdd8e">${L.esc(r.after_val || '—')}</td><td class="fpv">${r.source_url ? `<a href="${L.attr(r.source_url)}" target="_blank" rel="noopener" style="color:var(--ink2);text-decoration:underline">${L.esc(r.source_name || 'source')}</a>` : L.esc(r.source_name || '—')}</td></tr>`).join('')) : '<p style="color:var(--mut);margin-top:10px">Nothing written since the log started. The Data Desk stamps every edit here.</p>'}
+${chg.length ? tbl(['WHEN', 'WHAT', 'WAS', 'NOW', 'SOURCE'], chg.map(r => `<tr><td class="fpv">${when(r.run_at)}</td><td style="font-weight:700">${L.esc(r.entity || '')}</td><td class="fpv">${L.esc(r.before_val || '—')}</td><td style="color:#9fdd8e">${L.esc(r.after_val || '—')}</td><td class="fpv">${r.source_url ? link(r.source_url, r.source_name) : L.esc(r.source_name || '—')}</td></tr>`).join('')) : '<p style="color:var(--mut);margin-top:10px">Nothing written since the log started. The Data Desk stamps every edit here.</p>'}
 
 <div class="sect" style="font-size:15px">FEED HEALTH</div>
 ${tbl(['FEED', 'LAST OK', 'NOTE'], (feeds || []).map(f => `<tr><td style="font-weight:700">${L.esc(f.feed || '')}</td><td class="fpv">${when(f.last_ok)}</td><td class="fpv" style="color:${/error/i.test(f.note || '') ? '#FFB4BE' : 'var(--mut)'}">${L.esc(f.note || '')}</td></tr>`).join(''))}
@@ -131,18 +186,18 @@ ${tbl(['FEED', 'LAST OK', 'NOTE'], (feeds || []).map(f => `<tr><td style="font-w
 <div class="sect" style="font-size:15px">PLAYER STATS ON FILE <span class="mr">${(players || []).length} PLAYERS</span></div>
 ${(players || []).length ? tbl(['PLAYER', 'TEAM', 'LEAGUE', 'LINE'], players.map(p => `<tr><td style="font-weight:700">${L.esc(p.name || '')}</td><td class="fpv">${L.esc((L.TEAMS[p.team_id] || {}).n || p.team_id || '—')}</td><td class="fpv">${L.esc(p.league || '')}</td><td class="fpv">${L.esc(p.stat_line || '')}</td></tr>`).join('')) : '<p style="color:var(--mut);margin-top:10px">No player lines yet — the Data Desk builds this up run by run.</p>'}
 
-${other.length ? `<div class="sect" style="font-size:15px">NOTES FROM THE DESKS</div><div class="rail">${other.map(r => `<a href="${r.source_url ? L.attr(r.source_url) : '#'}"><span class="rlg"><span class="mfb" style="background:#312E2A;display:grid">${L.esc((r.kind || '?')[0].toUpperCase())}</span></span><span><span class="h">${L.esc(r.summary || r.entity || '')}</span><span class="m" style="display:block">${L.esc(r.desk || '')} · ${when(r.run_at)}</span></span></a>`).join('')}</div>` : ''}`;
-      return L.ok(res, P(shell(body, tab)), 0);
+${other.length ? `<div class="sect" style="font-size:15px">NOTES FROM THE DESKS</div><div class="rail">${other.map(r => `<a href="${r.source_url ? L.attr(r.source_url) : '#'}" rel="noopener noreferrer"><span class="rlg"><span class="mfb" style="background:#312E2A;display:grid">${L.esc((r.kind || '?')[0].toUpperCase())}</span></span><span><span class="h">${L.esc(r.summary || r.entity || '')}</span><span class="m" style="display:block">${L.esc(r.desk || '')} · ${when(r.run_at)}</span></span></a>`).join('')}</div>` : ''}`;
+      return L.ok(res, P(shell(body)), 0);
     }
 
     const [drafts, pub] = await Promise.all([articles('draft'), articles('published')]);
     L.R.setCtx({ articles: pub, matches: [] });
-    const u = (a, act) => q(`&action=${act}&id=${encodeURIComponent(a.id)}`);
     const body = `${nav}${notice}
 <div class="sect" style="font-size:15px">WAITING ON YOU <span class="mr">${drafts.length} DRAFT${drafts.length === 1 ? '' : 'S'}</span></div>
-${drafts.length ? drafts.map(a => draftCard(a, u)).join('') : '<p style="color:var(--mut);margin-top:16px">Queue is clear. The Morning Desk refills it every day.</p>'}
+${drafts.length ? drafts.map(a => draftCard(a, csrf)).join('') : '<p style="color:var(--mut);margin-top:16px">Queue is clear. The Morning Desk refills it every day.</p>'}
 <div class="sect" style="font-size:15px">RECENTLY PUBLISHED</div>
-${pub.slice(0, 12).map(a => `<div class="card" style="padding:10px 16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><a href="/news/${L.attr(a.id)}" target="_blank" style="font-weight:700;color:var(--w);font-size:13px">${a.h}</a><a class="rej" style="font-size:10px;padding:6px 10px;border-radius:5px;font-family:'Roboto Slab',serif;font-weight:900;flex:none" href="${u(a, 'unpublish')}">UNPUBLISH</a></div></div>`).join('')}`;
-    L.ok(res, P(shell(body, tab)), 0);
+${pub.slice(0, 12).map(a => `<div class="card" style="padding:10px 16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><a href="/news/${L.attr(a.id)}" target="_blank" style="font-weight:700;color:var(--w);font-size:13px">${a.h}</a>
+<form method="POST" action="/approve" style="margin:0;flex:none"><input type="hidden" name="csrf" value="${L.attr(csrf)}"><input type="hidden" name="id" value="${L.attr(a.id)}"><button class="rej" name="action" value="unpublish" type="submit" style="font-size:10px;padding:6px 10px;border-radius:5px;font-family:'Roboto Slab',serif;font-weight:900;border:none;cursor:pointer">UNPUBLISH</button></form></div></div>`).join('')}`;
+    L.ok(res, P(shell(body)), 0);
   } catch (e) { L.fail(res, e); }
 };

@@ -11,6 +11,7 @@ const S = require('./_svc.js');
 //
 // Everything that would let an unpublished story escape is switched off: no store, no index,
 // no og:image or twitter card, no NewsArticle markup. A stranger still gets a plain 404.
+const DRAFTCSS = `<style>.draftbar{background:#3a2a08;border:1px solid #7a5a12;color:#ffe0a3;padding:10px 16px;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:0 0 14px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}</style>`;
 const DRAFTBAR = (a, status) => `<div class="apr" style="max-width:760px;margin:18px auto 0"><div class="draftbar">
   <span>● ${L.esc(String(status || 'draft').toUpperCase())} PREVIEW — NOT PUBLISHED, NOT INDEXED</span>
   <a href="/approve" style="color:#ffe0a3;text-decoration:underline">BACK TO THE DESK</a>
@@ -33,7 +34,7 @@ module.exports = async (req, res) => {
           return L.ok(res, L.page({
             title: `${L.stripEmoji(draft.hRaw)} — DRAFT PREVIEW`,
             desc: '', canonical: `${L.SITE}/news/${draft.id}`,
-            ogImage: null, jsonld: null, noindex: true,
+            ogImage: null, jsonld: null, noindex: true, extraHead: DRAFTCSS,
             ctx: { kind: 'article', lg: draft.lg }, matches, arts,
             body: DRAFTBAR(draft, draft.status) + L.R.pgArticle(draft.id)
           }), 0);
