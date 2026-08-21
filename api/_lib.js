@@ -161,13 +161,16 @@ function searchIndex(arts) {
 }
 
 // ---------- page shell ----------
-function page({ title, desc, canonical, ogImage, jsonld, body, ctx, matches, arts, extraHead = '', extraJs = '' }) {
-  const robots = LAUNCHED ? '' : '<meta name="robots" content="noindex">';
+function page({ title, desc, canonical, ogImage, jsonld, body, ctx, matches, arts, extraHead = '', extraJs = '', noindex = false }) {
+  const robots = noindex
+    ? '<meta name="robots" content="noindex,nofollow,noarchive">'
+    : (LAUNCHED ? '' : '<meta name="robots" content="noindex">');
   const tick = matches && matches.length ? `<div class="tick" id="tick"><div class="tktrack" id="tkt">${R.tickerHTML(matches)}</div></div>` : '';
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="description" content="${attr(desc || 'Off The Tape — everything volleyball. Scores, news, rankings and recruiting across NCAA, LOVB, MLV, AVP and the international game.')}">
 ${robots}
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20viewBox=%220%200%20100%20100%22%20width=%22100%22%20height=%22100%22%3E%3Crect%20width=%22100%22%20height=%22100%22%20rx=%2218%22%20fill=%22%2312100E%22/%3E%3Cg%20stroke=%22%23FFFFFF%22%20stroke-width=%2210%22%20stroke-linecap=%22square%22%20fill=%22none%22%3E%3Cpath%20d=%22M12%2042%20V12%20H42%22/%3E%3Cpath%20d=%22M58%2012%20H88%20V42%22/%3E%3Cpath%20d=%22M88%2058%20V88%20H58%22/%3E%3Cpath%20d=%22M42%2088%20H12%20V58%22/%3E%3C/g%3E%3Ccircle%20cx=%2250%22%20cy=%2250%22%20r=%2217%22%20fill=%22%23FF1F3D%22/%3E%3C/svg%3E"><link rel="alternate icon" type="image/svg+xml" href="/icon.svg"><meta name="theme-color" content="#12100E">
 <link rel="canonical" href="${attr(canonical || SITE)}">
 <meta property="og:site_name" content="OFF THE TAPE"><meta property="og:type" content="${jsonld && jsonld['@type'] === 'NewsArticle' ? 'article' : 'website'}">
 <meta property="og:title" content="${attr(title)}"><meta property="og:description" content="${attr(desc || '')}">
@@ -187,14 +190,23 @@ ${footer()}
 <script>${UI}${extraJs}</script>
 </body></html>`;
 }
-function ok(res, html, maxAge) {
+function ok(res, html, maxAge, status) {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.setHeader('Cache-Control', `s-maxage=${maxAge || 60}, stale-while-revalidate=300`);
-  res.status(200).send(html);
+  // maxAge === 0 means "never store this". The old `maxAge || 60` quietly turned 0 into 60,
+  // so the desk and its drafts were being held in the shared CDN cache for a minute at a time
+  // even though the handler had already set no-store. Editor surfaces depend on this being right.
+  res.setHeader('Cache-Control', maxAge === 0
+    ? 'no-store, no-cache, must-revalidate, private'
+    : `s-maxage=${maxAge || 60}, stale-while-revalidate=300`);
+  res.status(status || 200).send(html);
 }
 function fail(res, e) {
+  // The message can carry Supabase text and internal paths. It belongs in the Vercel log,
+  // not on a stranger's screen.
+  console.error('[ott]', (e && e.stack) || e);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.status(500).send(`<!doctype html><meta charset="utf-8"><body style="background:#171614;color:#E7E2D8;font-family:system-ui;padding:40px"><h1 style="color:#FF1F3D">OFF THE TAPE</h1><p>Something broke on our side — try again in a minute.</p><pre style="color:#7D776C;font-size:11px">${esc(String(e && e.message || e))}</pre></body>`);
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(500).send(`<!doctype html><meta charset="utf-8"><title>OFF THE TAPE</title><body style="background:#171614;color:#E7E2D8;font-family:system-ui;padding:40px"><h1 style="color:#FF1F3D">OFF THE TAPE</h1><p>Something broke on our side — try again in a minute.</p></body>`);
 }
 
 module.exports = {
