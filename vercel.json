@@ -45,6 +45,84 @@
       "destination": "/api/sitemap?n=1"
     }
   ],
+  "images": {
+    "sizes": [
+      160,
+      320,
+      640,
+      828,
+      1200
+    ],
+    "qualities": [
+      50,
+      75
+    ],
+    "formats": [
+      "image/avif",
+      "image/webp"
+    ],
+    "minimumCacheTTL": 2592000,
+    "dangerouslyAllowSVG": false,
+    "contentDispositionType": "inline",
+    "remotePatterns": [
+      {
+        "protocol": "https",
+        "hostname": "^storage\\.googleapis\\.com$"
+      },
+      {
+        "protocol": "https",
+        "hostname": "^avp\\.com$"
+      },
+      {
+        "protocol": "https",
+        "hostname": "^www\\.lovb\\.com$"
+      },
+      {
+        "protocol": "https",
+        "hostname": "^images\\.volleyballworld\\.com$"
+      },
+      {
+        "protocol": "https",
+        "hostname": "^worldofvolley\\.com$"
+      }
+    ]
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "SAMEORIGIN"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=31536000; includeSubDomains"
+        }
+      ]
+    },
+    {
+      "source": "/approve",
+      "headers": [
+        {
+          "key": "Referrer-Policy",
+          "value": "no-referrer"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
+    }
+  ],
   "crons": [
     {
       "path": "/api/cron-feeds",
