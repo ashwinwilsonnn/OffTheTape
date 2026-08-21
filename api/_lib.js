@@ -37,7 +37,9 @@ const die = "this.classList.add('dead')";
 // Plain-text fields are escaped once here, so no renderer has to remember to do it.
 // The unescaped headline survives as .hRaw for <title>, meta tags and JSON-LD.
 async function getArticles(status) {
-  const rows = await supaGet(`articles?select=*&status=eq.${status || 'published'}&order=created_at.desc`);
+  // Running order is an editorial decision, not whatever Postgres hands back first.
+  // rank wins; ties fall back to publish time, then to when the desk filed it.
+  const rows = await supaGet(`articles?select=*&status=eq.${status || 'published'}&order=rank.desc,published_at.desc.nullslast,created_at.desc`);
   return rows.map(a => ({
     ...a,
     hRaw: a.h || '',
