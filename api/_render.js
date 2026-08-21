@@ -309,7 +309,8 @@ function embedsHTML(embeds) {
 function pgArticle(id){
  const a=art(id);if(!a)return pg404();
  const rel=ARTICLES.filter(x=>x.lg===a.lg&&x.id!==id).slice(0,3);
- const hrs=ageLabel(a.created_at);
+ // A story is as old as the moment it went live, not the moment the desk drafted it.
+ const hrs=ageLabel(a.published_at||a.created_at);
  const para=p=>/^Grade:\s/.test(p)?`<p class="grade">${p}</p>`:`<p>${p.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>')}</p>`;
  let flow='';
  if(a.sections){
