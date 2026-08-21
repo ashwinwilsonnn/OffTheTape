@@ -7,30 +7,7 @@ const { LEAGUES, TEAMS, CONF, CONFORDER, VNL, POLLW, POLLM, STAND_LOVB, STAND_ML
 
 const FP = f => 'https://commons.wikimedia.org/wiki/Special:FilePath/' + f;
 
-// ---------- cover photos through Vercel's image pipeline ----------
-// Publisher originals are press-sized: the AVP cover is a 2560px WordPress "-scaled.jpg",
-// Volleyball World serves a full Cloudinary transform. We were shipping megabytes to fill a
-// 250px card. /_vercel/image resizes to the real display size and serves WebP/AVIF from the
-// edge cache. Hosts must also be listed in vercel.json -> images.remotePatterns; anything
-// not on this list passes through untouched rather than 400ing, so a new publisher still
-// renders (just unoptimised, and the desk flags it).
-const IMG_HOSTS = [
-  'storage.googleapis.com',      // huskers.com, provolleyball.com, ukathletics.com assets
-  'avp.com',
-  'www.lovb.com',
-  'images.volleyballworld.com',
-  'worldofvolley.com'
-];
-function imgHostOK(src) {
-  try { return IMG_HOSTS.includes(new URL(src).hostname); } catch (e) { return false; }
-}
-function optImg(src, w, q) {
-  if (!src || /^data:/.test(src) || !imgHostOK(src)) return src;
-  return `/_vercel/image?url=${encodeURIComponent(src)}&w=${w}&q=${q || 75}`;
-}
-// One failure falls back to the publisher's original; a second failure hides the image and
-// its credit line (the .dead rule), which is what the covers already did.
-const IMGFB = "if(this.dataset.fb){this.src=this.dataset.fb;this.dataset.fb='';}else{this.classList.add('dead')}";
+const { IMG_HOSTS, imgHostOK, optImg, IMGFB } = require('./_img.js');
 
 const VFLAG = Object.fromEntries(VNL);
 const die = "this.classList.add('dead')";
