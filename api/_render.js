@@ -275,6 +275,30 @@ function pgTeam(id){
  <div class="hubslim" style="margin-top:10px"><span style="width:38px;height:38px;display:grid;place-items:center">${tlogo(t,34)}</span><h1>${t.n}</h1><span class="r">${LEAGUES[t.lg].n.toUpperCase()} ${t.rk?'· NO. '+t.rk+' AVCA':''} · ${t.rec}</span></div>
  ${arts.length?`<div class="grid3" style="margin-top:20px">${arts.map(a=>acard(a,'sm')).join('')}</div>`:`<p style="color:var(--ink2);margin-top:18px;font-size:14px">Every article tagged ${t.s} lands here automatically.</p>`}`;
 }
+// ---------- native embeds (EMBED STANDARD) ----------
+// Returns the blockquotes plus whichever platform scripts they need, deduped.
+function embedsHTML(embeds) {
+  if (!embeds || !embeds.length) return '';
+  const parts = [], scr = new Set();
+  for (const e of embeds) {
+    if (!e || !e.url) continue;
+    const u = String(e.url);
+    if (e.platform === 'x' || /twitter\.com|x\.com/.test(u)) {
+      parts.push(`<blockquote class="twitter-tweet" data-theme="dark"><a href="${u}"></a></blockquote>`);
+      scr.add('<script async src="https://platform.twitter.com/widgets.js" charset="utf-8"><\/script>');
+    } else if (e.platform === 'instagram' || /instagram\.com/.test(u)) {
+      parts.push(`<blockquote class="instagram-media" data-instgrm-permalink="${u}" data-instgrm-version="14"></blockquote>`);
+      scr.add('<script async src="https://www.instagram.com/embed.js"><\/script>');
+    } else if (e.platform === 'tiktok' || /tiktok\.com/.test(u)) {
+      parts.push(`<blockquote class="tiktok-embed" cite="${u}"><a href="${u}"></a></blockquote>`);
+      scr.add('<script async src="https://www.tiktok.com/embed.js"><\/script>');
+    } else {
+      parts.push(`<p><a href="${u}" target="_blank" rel="noopener">↗ ${e.context || u}</a></p>`);
+    }
+  }
+  if (!parts.length) return '';
+  return parts.map(p => `<div class="emb">${p}</div>`).join('') + [...scr].join('');
+}
 function pgArticle(id){
  const a=art(id);if(!a)return pg404();
  const rel=ARTICLES.filter(x=>x.lg===a.lg&&x.id!==id).slice(0,3);
@@ -291,11 +315,15 @@ function pgArticle(id){
  const srcs=a.sources&&a.sources.length
   ?`<div class="srcs"><div class="t">SOURCES — EVERY CLAIM CITED</div>${a.sources.map(s=>`<a href="${s.url}" target="_blank" rel="noopener">↗ ${s.name}</a>`).join('')}</div>`
   :(a.src?`<div class="src">${a.src}</div>`:'');
- return `<div class="abody">${cov(a,true)}
+ const hero = a.ph && a.ph.link
+  ? `<a href="${a.ph.link}" target="_blank" rel="noopener" title="View the original post">${cov(a,true)}</a>`
+  : cov(a,true);
+ return `<div class="abody">${hero}
  <h1>${a.h}</h1>
  ${a.dek?`<p class="dek">${a.dek}</p>`:''}
  <div class="byl">OFF THE TAPE STAFF · <b>${a.chip}</b> · ${hrs}${a.ph?` · ${a.ph.cr}`:''}</div>
  ${flow}
+ ${embedsHTML(a.embeds)}
  ${srcs}
  <div class="tagrow"><a href="/hub/${a.lg}">${LEAGUES[a.lg].n.toUpperCase()}</a>${a.t1?`<a href="/team/${a.t1}">${TEAMS[a.t1].n.toUpperCase()}</a>`:''}${a.t2?`<a href="/team/${a.t2}">${TEAMS[a.t2].n.toUpperCase()}</a>`:''}</div>
  <div class="finep">Off The Tape uses AI-assisted production; every article is reviewed and approved before publication. Corrections: ashwin@off-the-tape.com${a.ph?` · Photo: ${a.ph.cr}`:''}</div>
@@ -321,6 +349,6 @@ function pg404(){return `<div style="text-align:center;padding:60px 0"><div clas
 
 module.exports = {
   setCtx, art, toMatch, normDay, ageLabel, tlogo, tlg, die, STAR, FP, VFLAG,
-  cov, photoCov, acard, railItem, mcard, tickerHTML, nlStrip,
+  cov, photoCov, acard, railItem, mcard, tickerHTML, nlStrip, embedsHTML,
   pgHome, pgHub, pgScores, pgTeam, pgArticle, pgNews, pgAbout, pg404
 };
