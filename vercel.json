@@ -67,24 +67,31 @@
     "remotePatterns": [
       {
         "protocol": "https",
-        "hostname": "^storage\\.googleapis\\.com$"
+        "hostname": "storage.googleapis.com"
       },
       {
         "protocol": "https",
-        "hostname": "^avp\\.com$"
+        "hostname": "avp.com"
       },
       {
         "protocol": "https",
-        "hostname": "^www\\.lovb\\.com$"
+        "hostname": "www.lovb.com"
       },
       {
         "protocol": "https",
-        "hostname": "^images\\.volleyballworld\\.com$"
+        "hostname": "images.volleyballworld.com"
       },
       {
         "protocol": "https",
-        "hostname": "^worldofvolley\\.com$"
+        "hostname": "worldofvolley.com"
       }
+    ],
+    "domains": [
+      "storage.googleapis.com",
+      "avp.com",
+      "www.lovb.com",
+      "images.volleyballworld.com",
+      "worldofvolley.com"
     ]
   },
   "headers": [
