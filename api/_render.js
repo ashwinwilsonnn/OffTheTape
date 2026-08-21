@@ -70,12 +70,21 @@ function toMatch(m) {
 /* ================= COVERS ================= */
 function photoCov(a,lead){
  const t=a.t1?TEAMS[a.t1]:null;const c=t?t.c1:(a.lgc||'#141414');
- // The lead story and the article hero are the biggest boxes on the page; cards are 250-330px.
- const w1=lead?828:320, w2=lead?1200:640;
- const opt=optImg(a.ph.src,w2), one=optImg(a.ph.src,w1);
+ // Width descriptors, not DPR. The old 1x/2x srcset meant a 390px phone still pulled the
+ // 1200px lead image; now the browser picks off the box it will actually paint into.
+ // The lead and the article hero run the full column (.abody is capped at 760px); a card is
+ // full-width on a phone and ~330px in a desktop grid.
+ const WS = lead ? [320, 640, 828, 1200] : [160, 320, 640, 828];
+ const sizes = lead ? '(max-width:760px) 100vw, (max-width:1100px) 62vw, 760px'
+                    : '(max-width:600px) 100vw, (max-width:900px) 46vw, 330px';
+ const w2=lead?1200:640;
+ const opt=optImg(a.ph.src,w2);
  const fb=opt===a.ph.src?'':` data-fb="${a.ph.src}"`;
+ // Only worth a srcset when the host is actually optimisable — otherwise every candidate is
+ // the same untouched URL.
+ const rs = fb ? ` srcset="${WS.map(w=>`${optImg(a.ph.src,w)} ${w}w`).join(', ')}" sizes="${sizes}"` : '';
  return `<div class="cv" style="background:linear-gradient(135deg,${c},#0A0A0A 170%)">
-  <img class="cvph" src="${opt}"${one!==opt?` srcset="${one} 1x, ${opt} 2x"`:''} alt=""${fb} width="${w2}" height="${Math.round(w2*9/16)}" decoding="async" ${lead?'fetchpriority="high"':'loading="lazy"'} onerror="${fb?IMGFB:die}">
+  <img class="cvph" src="${opt}"${rs} alt=""${fb} width="${w2}" height="${Math.round(w2*9/16)}" decoding="async" ${lead?'fetchpriority="high"':'loading="lazy"'} onerror="${fb?IMGFB:die}">
   <div class="cvscrim"></div>
   <div class="chip">${a.chip}</div>
   <div class="cvcred">${a.ph.cr}</div>
