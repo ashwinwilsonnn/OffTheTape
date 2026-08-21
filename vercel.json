@@ -67,21 +67,6 @@
     "remotePatterns": [
       {
         "protocol": "https",
-        "hostname": "storage.googleapis.com",
-        "pathname": "/huskers-com-prod/**"
-      },
-      {
-        "protocol": "https",
-        "hostname": "storage.googleapis.com",
-        "pathname": "/provolleyball-prod/**"
-      },
-      {
-        "protocol": "https",
-        "hostname": "storage.googleapis.com",
-        "pathname": "/ukathletics-com/**"
-      },
-      {
-        "protocol": "https",
         "hostname": "avp.com"
       },
       {
