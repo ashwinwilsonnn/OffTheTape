@@ -80,6 +80,10 @@
       {
         "protocol": "https",
         "hostname": "worldofvolley.com"
+      },
+      {
+        "protocol": "https",
+        "hostname": "huskers.com"
       }
     ]
   },

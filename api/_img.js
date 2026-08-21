@@ -6,16 +6,21 @@
 //
 // Verified against the live /_vercel/image endpoint rather than assumed:
 //   avp.com, www.lovb.com, images.volleyballworld.com, worldofvolley.com  →  optimise
+//   huskers.com (/imgproxy/…)                                             →  optimise
 //   storage.googleapis.com                                                →  400, always,
-//     even scoped to a single bucket path. Six published covers sit on it (huskers,
-//     provolleyball, ukathletics); they load the publisher original and the desk flags each
-//     one. Listing it anyway would cost a failed request before the fallback — slower than
-//     not trying at all.
+//     even scoped to a single bucket path. Vercel will not allowlist Google Cloud Storage.
+//
+// The way around that last one: Nebraska, Kentucky and ProVolleyball all self-host imgproxy
+// at <publisher>/imgproxy/<sig>/<opts>/<base64 of the bucket URL>. Same file, pre-shrunk,
+// on a host Vercel will take. The signature covers the size options, so we can only use the
+// exact variants their own pages publish — no minting new sizes — but 1980px q90 beats the
+// full press original by an order of magnitude before Vercel even touches it.
 const IMG_HOSTS = [
   'avp.com',
   'www.lovb.com',
   'images.volleyballworld.com',
-  'worldofvolley.com'
+  'worldofvolley.com',
+  'huskers.com'
 ];
 
 function imgHostOK(src) {
