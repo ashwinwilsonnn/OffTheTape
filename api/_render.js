@@ -6,6 +6,32 @@ const D = require('./_data.js');
 const { LEAGUES, TEAMS, CONF, CONFORDER, VNL, POLLW, POLLM, STAND_LOVB, STAND_MLV, VNLW, VNLM, CLASSBOARD, COMMITWIRE } = D;
 
 const FP = f => 'https://commons.wikimedia.org/wiki/Special:FilePath/' + f;
+
+// ---------- cover photos through Vercel's image pipeline ----------
+// Publisher originals are press-sized: the AVP cover is a 2560px WordPress "-scaled.jpg",
+// Volleyball World serves a full Cloudinary transform. We were shipping megabytes to fill a
+// 250px card. /_vercel/image resizes to the real display size and serves WebP/AVIF from the
+// edge cache. Hosts must also be listed in vercel.json -> images.remotePatterns; anything
+// not on this list passes through untouched rather than 400ing, so a new publisher still
+// renders (just unoptimised, and the desk flags it).
+const IMG_HOSTS = [
+  'storage.googleapis.com',      // huskers.com, provolleyball.com, ukathletics.com assets
+  'avp.com',
+  'www.lovb.com',
+  'images.volleyballworld.com',
+  'worldofvolley.com'
+];
+function imgHostOK(src) {
+  try { return IMG_HOSTS.includes(new URL(src).hostname); } catch (e) { return false; }
+}
+function optImg(src, w, q) {
+  if (!src || /^data:/.test(src) || !imgHostOK(src)) return src;
+  return `/_vercel/image?url=${encodeURIComponent(src)}&w=${w}&q=${q || 75}`;
+}
+// One failure falls back to the publisher's original; a second failure hides the image and
+// its credit line (the .dead rule), which is what the covers already did.
+const IMGFB = "if(this.dataset.fb){this.src=this.dataset.fb;this.dataset.fb='';}else{this.classList.add('dead')}";
+
 const VFLAG = Object.fromEntries(VNL);
 const die = "this.classList.add('dead')";
 const STAR = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.6l-6.3 3.6 1.5-7.1-5.4-4.9 7.2-.8z" fill="#0A0A0A"/></svg>';
@@ -67,8 +93,12 @@ function toMatch(m) {
 /* ================= COVERS ================= */
 function photoCov(a,lead){
  const t=a.t1?TEAMS[a.t1]:null;const c=t?t.c1:(a.lgc||'#141414');
+ // The lead story and the article hero are the biggest boxes on the page; cards are 250-330px.
+ const w1=lead?828:320, w2=lead?1200:640;
+ const opt=optImg(a.ph.src,w2), one=optImg(a.ph.src,w1);
+ const fb=opt===a.ph.src?'':` data-fb="${a.ph.src}"`;
  return `<div class="cv" style="background:linear-gradient(135deg,${c},#0A0A0A 170%)">
-  <img class="cvph" src="${a.ph.src}" alt="" onerror="${die}">
+  <img class="cvph" src="${opt}"${one!==opt?` srcset="${one} 1x, ${opt} 2x"`:''} alt=""${fb} width="${w2}" height="${Math.round(w2*9/16)}" decoding="async" ${lead?'fetchpriority="high"':'loading="lazy"'} onerror="${fb?IMGFB:die}">
   <div class="cvscrim"></div>
   <div class="chip">${a.chip}</div>
   <div class="cvcred">${a.ph.cr}</div>
@@ -350,5 +380,6 @@ function pg404(){return `<div style="text-align:center;padding:60px 0"><div clas
 module.exports = {
   setCtx, art, toMatch, normDay, ageLabel, tlogo, tlg, die, STAR, FP, VFLAG,
   cov, photoCov, acard, railItem, mcard, tickerHTML, nlStrip, embedsHTML,
+  optImg, imgHostOK, IMG_HOSTS,
   pgHome, pgHub, pgScores, pgTeam, pgArticle, pgNews, pgAbout, pg404
 };
