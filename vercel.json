@@ -67,7 +67,18 @@
     "remotePatterns": [
       {
         "protocol": "https",
-        "hostname": "storage.googleapis.com"
+        "hostname": "storage.googleapis.com",
+        "pathname": "/huskers-com-prod/**"
+      },
+      {
+        "protocol": "https",
+        "hostname": "storage.googleapis.com",
+        "pathname": "/provolleyball-prod/**"
+      },
+      {
+        "protocol": "https",
+        "hostname": "storage.googleapis.com",
+        "pathname": "/ukathletics-com/**"
       },
       {
         "protocol": "https",
@@ -85,13 +96,6 @@
         "protocol": "https",
         "hostname": "worldofvolley.com"
       }
-    ],
-    "domains": [
-      "storage.googleapis.com",
-      "avp.com",
-      "www.lovb.com",
-      "images.volleyballworld.com",
-      "worldofvolley.com"
     ]
   },
   "headers": [
