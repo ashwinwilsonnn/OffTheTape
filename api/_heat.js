@@ -21,13 +21,18 @@
 
 // Hours a kind of story stays alive. First pattern to match wins, so specific comes first.
 // Matched against the part of the chip after the league.
+//
+// PREVIEW vs LOOKAHEAD is the distinction that bit us: PREVIEW is 16h because it means
+// TONIGHT'S match, and it is worthless once they play. A piece about an event a fortnight
+// out is not that — it stays useful right up to the event — so it belongs in the 110h row
+// as LOOKAHEAD. Filing one as PREVIEW buries it within a day.
 const SHELF = [
-  [/GAMEDAY|PREVIEW|DAY ONE|TONIGHT|TIP-?OFF|FIRST SERVE/, 16],   // dead once they play
+  [/GAMEDAY|PREVIEW|DAY ONE|TONIGHT|TIP-?OFF|FIRST SERVE/, 16],   // dead once they play — TODAY'S match only
   [/CHAMPIONSHIP|TITLE|CHAMPIONS\b/,                       72],   // a title outlives a result
   [/RECAP|FINAL|RESULT|SWEEP|WINNERS|SCOREBOARD|DAY \d/,   30],   // last night's news
   [/BREAKING|COMMIT|PORTAL|INJURY|TRANSFER|SIGNING|HIRE|FRONT OFFICE|EXPANSION/, 48],
   [/RANKINGS|POLL|CLASS OF|THE BOARD|BRACKET/,             96],   // weekly cadence — holds to the next one
-  [/ARGUMENT|ANALYSIS|TREND|PLAYER|FILM|BUSINESS|OFFSEASON|SCHEDULE|FEATURE|ROSTER|SEASON ONE|EXPLAINER|WHY /, 110],
+  [/ARGUMENT|ANALYSIS|TREND|PLAYER|FILM|BUSINESS|OFFSEASON|SCHEDULE|FEATURE|ROSTER|SEASON ONE|EXPLAINER|WHY |LOOKAHEAD|WHAT'S NEXT/, 110],
 ];
 const DEFAULT_SHELF = 36;
 const RANK_WORTH = 0.35;   // rank 100 ≈ one day of freshness

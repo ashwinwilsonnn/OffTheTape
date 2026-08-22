@@ -35,6 +35,14 @@ async function byStatus(status) {
   return normalise(await svcGet(`articles?select=*&status=eq.${encodeURIComponent(status)}&order=created_at.desc`));
 }
 
+// Articles carrying a staged rewrite. `pending` is never read by any public surface, so a
+// desk can rewrite live prose into it without a word of that reaching a reader — the editor
+// applies it or drops it on /approve. This is what lets the back catalogue be reworked
+// without ever putting unreviewed text on the site.
+async function withPending() {
+  return normalise(await svcGet('articles?select=*&pending=not.is.null&order=pending_at.desc'));
+}
+
 // One row by id, whatever its status. Callers must have already proved they are the editor.
 async function anyById(id) {
   const clean = safeId(id);
@@ -43,4 +51,4 @@ async function anyById(id) {
   return rows.length ? normalise(rows)[0] : null;
 }
 
-module.exports = { svcGet, normalise, byStatus, anyById, safeId };
+module.exports = { svcGet, normalise, byStatus, withPending, anyById, safeId };
