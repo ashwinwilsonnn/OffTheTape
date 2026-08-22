@@ -58,65 +58,72 @@ if(ov)ov.onclick=pClose;
 /* ---------- TEAMS DROPDOWN (content server-rendered, hidden until toggled) ---------- */
 var tdd=$('#tdd');
 function tddClose(){if(!tdd)return;tdd.classList.remove('on');var b=$('#tddbtn');if(b)b.classList.remove('on')}
-function tddToggle(){if(!tdd)return;var on=tdd.classList.toggle('on');var b=$('#tddbtn');if(b)b.classList.toggle('on',on)}
+function tddToggle(){if(!tdd)return;if(tdd.classList.contains('on'))return tddClose();
+ tdd.classList.add('on');var b=$('#tddbtn');if(b)b.classList.add('on')}
 window.tddClose=tddClose;window.tddToggle=tddToggle;
 
-/* ---------- SEARCH over the index the server embedded ---------- */
-var sb=$('#sb'),sw=$('#sw'),si=$('#si'),sr=$('#sr');
-function sClose(){if(sw)sw.classList.remove('on');if(sr)sr.innerHTML=''}
-if(sb)sb.onclick=function(){if(!sw)return;var on=sw.classList.toggle('on');if(on&&si)si.focus();else sClose()};
-if(si)si.oninput=function(){
- var q=si.value.trim().toLowerCase();
- if(!sr)return;
- if(q.length<2){sr.innerHTML='';return}
- var IDX=(window.OTT&&window.OTT.idx)||{a:[],t:[]};
- var teams=IDX.t.filter(function(t){return t.n.toLowerCase().indexOf(q)>=0}).slice(0,6);
- var arts=IDX.a.filter(function(a){return a.h.toLowerCase().indexOf(q)>=0}).slice(0,6);
- var h='';
- if(teams.length)h+='<div class="shd">TEAMS</div>'+teams.map(function(t){
-  return '<a href="/team/'+t.i+'"><b>'+t.n+'</b><i>'+t.l+'</i></a>'}).join('');
- if(arts.length)h+='<div class="shd">STORIES</div>'+arts.map(function(a){
-  return '<a href="/news/'+a.i+'"><b>'+a.h+'</b><i>'+a.c+'</i></a>'}).join('');
- sr.innerHTML=h||'<div class="shd">NOTHING MATCHES</div>';
+/* ---------- SEARCH over a compact server-embedded index ---------- */
+var sw=$('#sw'),si=$('#si'),sr=$('#sr'),sb=$('#sb');
+var IDX=(window.OTT&&window.OTT.idx)||{a:[],t:[]};
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+if(sb&&sw&&si&&sr){
+ sb.onclick=function(){sw.classList.toggle('on');if(sw.classList.contains('on'))si.focus();else sr.innerHTML=''};
+ si.oninput=function(){
+  var q=si.value.trim().toLowerCase();
+  if(q.length<2){sr.innerHTML='';return}
+  var ar=IDX.a.filter(function(a){return (a.h+' '+a.c).toLowerCase().indexOf(q)>=0}).slice(0,5)
+   .map(function(a){return '<a href="/news/'+encodeURIComponent(a.i)+'"><b>ARTICLE</b> — '+esc(a.h)+'</a>'});
+  var tm=IDX.t.filter(function(t){return t.n.toLowerCase().indexOf(q)>=0}).slice(0,5)
+   .map(function(t){return '<a href="/team/'+encodeURIComponent(t.i)+'"><b>TEAM</b> — '+esc(t.n)+' · '+esc(t.l)+'</a>'});
+  sr.innerHTML=ar.concat(tm).join('')||'<div class="non">NO MATCHES — TRY A TEAM OR LEAGUE NAME</div>';
+ };
+}
+
+/* ---------- NEWSLETTER POPUP — real signup, posts to /api/subscribe ---------- */
+var nlov=$('#nlov');
+function nlClose(){if(nlov)nlov.classList.remove('on');try{localStorage.setItem('ott_nl','1')}catch(e){}}
+window.nlClose=nlClose;
+if(nlov){
+ if($('#nlx'))$('#nlx').onclick=nlClose;
+ if($('#nlno'))$('#nlno').onclick=nlClose;
+ nlov.addEventListener('click',function(e){if(e.target===nlov)nlClose()});
+ if($('#nlj'))$('#nlj').onclick=function(){
+  var v=$('#nlpe').value,ok=$('#nlokp');
+  ok.style.display='block';
+  if(!/.+@.+\..+/.test(v)){ok.textContent='ENTER A VALID EMAIL ADDRESS.';return}
+  ok.textContent='SIGNING YOU UP…';
+  fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:v})})
+   .then(function(r){return r.ok})
+   .then(function(good){
+    ok.textContent=good?'YOU’RE ON THE LIST. FIRST OTT AM LANDS ON THE NEXT PUBLISHING MORNING.':'SIGNUP HICCUP ON OUR SIDE — TRY AGAIN IN A MINUTE.';
+    if(good)setTimeout(nlClose,2200);
+   })
+   .catch(function(){ok.textContent='SIGNUP HICCUP ON OUR SIDE — TRY AGAIN IN A MINUTE.'});
+ };
+ var seen=false;try{seen=localStorage.getItem('ott_nl')==='1'}catch(e){}
+ if(!seen&&location.pathname.indexOf('newsletter')<0)setTimeout(function(){nlov.classList.add('on')},6000);
+}
+
+/* ---------- INLINE NEWSLETTER STRIP ---------- */
+var nsj=$('#nsj');
+if(nsj)nsj.onclick=function(){
+ var v=$('#nse').value,ok=$('#nsk');
+ ok.style.display='block';
+ if(!/.+@.+\..+/.test(v)){ok.textContent='ENTER A VALID EMAIL ADDRESS.';return}
+ ok.textContent='SIGNING YOU UP…';
+ fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:v})})
+  .then(function(r){return r.ok})
+  .then(function(good){ok.textContent=good?'YOU’RE ON THE LIST 🤝':'SIGNUP HICCUP — TRY AGAIN IN A MINUTE.'})
+  .catch(function(){ok.textContent='SIGNUP HICCUP — TRY AGAIN IN A MINUTE.'});
 };
 
-/* ---------- NEWSLETTER (popup + inline strip; both POST for real) ---------- */
-function join(inp,out){
- var e=inp&&inp.value?inp.value.trim():'';
- if(!out)return;
- out.textContent='…';
- fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e})})
-  .then(function(r){return r.json()})
-  .then(function(d){out.textContent=d.message||(d.ok?'You are in.':'That did not work.');
-   if(d.ok){try{localStorage.setItem('ott_nl','1')}catch(x){}if(inp)inp.value=''}})
-  .catch(function(){out.textContent='Network hiccup — try again.'});
-}
-var nsj=$('#nsj');if(nsj)nsj.onclick=function(){join($('#nse'),$('#nsk'))};
-var nlj=$('#nlj');if(nlj)nlj.onclick=function(){join($('#nlpe'),$('#nlokp'))};
+/* ---------- MOST READ CAROUSEL ---------- */
+window.mrScroll=function(dx){var m=$('#mr');if(m)m.scrollBy({left:dx,behavior:'smooth'})};
 
-/* ---------- NEWSLETTER POPUP: once per visitor, and only after they have read a little ---------- */
-(function(){
- var ov2=$('#nlov');if(!ov2)return;
- var seen=false;try{seen=localStorage.getItem('ott_nl')==='1'}catch(x){seen=true}
- if(seen){ov2.remove();return}
- var fired=false;
- function show(){if(fired)return;fired=true;ov2.classList.add('on')}
- function dismiss(){ov2.classList.remove('on');try{localStorage.setItem('ott_nl','1')}catch(x){}}
- var nlx=$('#nlx');if(nlx)nlx.onclick=dismiss;
- var nlno=$('#nlno');if(nlno)nlno.onclick=dismiss;
- ov2.addEventListener('click',function(e){if(e.target===ov2)dismiss()});
- setTimeout(show,25000);
- addEventListener('scroll',function(){if(scrollY>1200)show()},{passive:true});
-})();
-
-/* ---------- MOST READ arrows ---------- */
-window.mrScroll=function(d){var e=$('#mr');if(e)e.scrollBy({left:d,behavior:'smooth'})};
-
-/* ---------- ESC closes whatever is open ---------- */
-addEventListener('keydown',function(e){
- if(e.key!=='Escape')return;
- pClose();tddClose();sClose();
- var n=$('#nlov');if(n)n.classList.remove('on');
+/* ---------- ESC closes everything ---------- */
+document.addEventListener('keydown',function(e){
+ if(e.key==='Escape'){nlClose();pClose();if(sw)sw.classList.remove('on');tddClose()}
 });
 }
+
 module.exports = '(' + ui.toString() + ')();';
