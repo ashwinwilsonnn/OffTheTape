@@ -53,11 +53,16 @@ async function getArticles(status) {
     ph: a.photo_url ? { src: a.photo_url, cr: esc(a.photo_credit || ''), link: a.photo_link || null } : null
   }));
 }
+// Team identity lives in one place now — see _teamkey.js for why. The board used to key a
+// match on `a_team || a_name`, which gave 'tamu' for a logo-linked copy and 'ta&m' for a
+// text-only one, so the same fixture survived the dedupe twice.
+const TK = require('./_teamkey.js');
+
 async function getMatches() {
   const rows = await supaGet('matches?select=*&order=id.asc');
   // Same day + same two teams = one card. The row that knows the most wins:
   // a final score beats a scheduled time, logo-linked beats text-only, feed beats hand entry.
-  const key = m => R.normDay(m.day_label).dk + '|' + [(m.a_team || m.a_name || '').toLowerCase().slice(0, 4), (m.b_team || m.b_name || '').toLowerCase().slice(0, 4)].sort().join('|');
+  const key = m => R.normDay(m.day_label).dk + '|' + [TK.teamKey(m.league_key, m.a_team, m.a_name), TK.teamKey(m.league_key, m.b_team, m.b_name)].sort().join('|');
   const rich = x => (x.status === 'FINAL' ? 8 : 0) + (x.a_team ? 2 : 0) + (x.b_team ? 2 : 0) + (x.source ? 1 : 0);
   const seen = new Map();
   for (const m of rows) { const k = key(m), prev = seen.get(k); if (!prev || rich(m) > rich(prev)) seen.set(k, m); }
