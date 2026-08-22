@@ -33,6 +33,19 @@ module.exports = `
   .fl a{padding:9px 0;display:inline-block;font-size:9.5px}
 }
 
+/* ---- ticker on a phone ----
+   At 218px a card and 19px of side padding, a 390px screen showed 1.8 cards: you could never
+   see a matchup and the next one at the same time. Tighter cards fit ~2.5, and 8px off the
+   height is 8px given back to the story above the fold. */
+@media(max-width:600px){
+  .tick{height:62px}
+  .tkc{min-width:152px;padding:7px 12px;gap:3px}
+  .tkc .tl{gap:8px}
+  .tkbody{gap:8px}
+  .tkdayl{font-size:7.5px}
+  .tklead{font-size:7.5px}
+}
+
 /* The byline runs long on a phone once the photo credit is appended — let it breathe
    instead of crowding the headline. */
 @media(max-width:480px){
