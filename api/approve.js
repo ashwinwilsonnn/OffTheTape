@@ -1,6 +1,7 @@
 // THE DESK — the one place Ashwin reviews what the desks produced.
 //   /approve            drafts, previewed exactly as they will publish
 //   /approve?tab=data   what the Data Desk changed, feed health, the live board
+//   /approve?edit=<id>  edit any article in any state, or archive it
 //
 // Auth: the PIN is posted once and exchanged for a signed HttpOnly cookie (see _auth.js).
 // It never appears in a URL, so it never reaches browser history, Vercel's request logs, or
@@ -67,12 +68,108 @@ function draftCard(a, csrf) {
           <button class="pub" name="action" value="publish" type="submit">✓ PUBLISH</button>
           <button class="rej" name="action" value="reject" type="submit">✕ REJECT</button>
         </form>
+        <a class="rej ghost" href="/approve?edit=${L.attr(a.id)}">EDIT</a>
         <a class="rej ghost" href="/news/${L.attr(a.id)}" target="_blank">PREVIEW PAGE ↗</a>
       </div>
     </div>
   </div>
 </div>
 <style>@media(max-width:720px){.card>div{grid-template-columns:1fr!important}}</style>`;
+}
+
+// ---------- the editor ----------
+// An article is stored one of two ways: `body`, a flat array of paragraphs, or `sections`,
+// an array of {h2, paras}. Both flatten to the same plain text — a blank line between
+// paragraphs and "## " in front of a heading — which is the shape readAs() already renders
+// on the card above. So what you edit is exactly what you have been reading.
+function bodyToText(a) {
+  const parts = a.sections
+    ? a.sections.flatMap(s => (s.h2 ? ['## ' + s.h2] : []).concat(s.paras || []))
+    : (a.body || []);
+  return parts.join('\n\n');
+}
+function textToBody(txt) {
+  const blocks = String(txt || '').split(/\n\s*\n/).map(x => x.trim()).filter(Boolean);
+  if (!blocks.some(b => /^## /.test(b))) return { body: blocks, sections: null };
+  const sections = [];
+  let cur = null;
+  for (const b of blocks) {
+    if (/^## /.test(b)) { cur = { h2: b.slice(3).trim(), paras: [] }; sections.push(cur); }
+    else { if (!cur) { cur = { h2: '', paras: [] }; sections.push(cur); } cur.paras.push(b); }
+  }
+  // body stays populated as the flat fallback, so a renderer that ignores sections still works
+  return { body: sections.flatMap(x => x.paras), sections };
+}
+const srcToText = a => (a.sources || []).map(x => `${x.name} | ${x.url}`).join('\n');
+function textToSrc(txt) {
+  return String(txt || '').split('\n').map(x => x.trim()).filter(Boolean).map(line => {
+    const i = line.lastIndexOf('|');
+    return i < 0 ? { name: line, url: '' } : { name: line.slice(0, i).trim(), url: line.slice(i + 1).trim() };
+  }).filter(x => x.url);   // a source without a link is not a source
+}
+
+function editPage(a, csrf) {
+  const opt = k => `<option value="${L.attr(k)}"${a.league === k ? ' selected' : ''}>${L.esc(L.LEAGUES[k].n)}</option>`;
+  const st = String(a.status || 'draft');
+  return `<div class="drow" style="margin:18px 0 4px;justify-content:space-between">
+  <div class="dnav" style="margin:0"><a href="/approve">‹ BACK TO THE DESK</a></div>
+  <span class="meta" style="margin:0">EDITING · ${L.esc(a.id)} · ${L.esc(st.toUpperCase())}</span>
+</div>
+<form class="card ed" method="POST" action="/approve" style="padding:18px 20px">
+  <input type="hidden" name="csrf" value="${L.attr(csrf)}">
+  <input type="hidden" name="id" value="${L.attr(a.id)}">
+
+  <label>HEADLINE</label>
+  <input name="h" value="${L.attr(a.hRaw || '')}" required>
+  <div class="hint">Sentence case, not caps — the site stopped uppercasing headlines. Under about 55 characters or it wraps to two lines on a phone.</div>
+
+  <label>DEK</label>
+  <textarea name="dek" rows="3">${L.esc(a.dekRaw || '')}</textarea>
+
+  <div class="two">
+    <div>
+      <label>CHIP</label>
+      <input name="chip" value="${L.attr((a.chip || '').replace(/&amp;/g, '&'))}">
+      <div class="hint">Reads <b>LEAGUE · KIND</b>. The KIND half sets how long this stays on the front page: GAMEDAY/PREVIEW 16h · RECAP/FINAL 30h · BREAKING/COMMIT/INJURY 48h · CHAMPIONSHIP 72h · RANKINGS 96h · ARGUMENT/ANALYSIS/PLAYER 110h. Anything else falls back to 36h.</div>
+    </div>
+    <div>
+      <label>LEAGUE</label>
+      <select name="league">${Object.keys(L.LEAGUES).map(opt).join('')}</select>
+      <label style="margin-top:14px">RANK · 0–100</label>
+      <input name="rank" type="number" min="0" max="100" step="1" value="${L.attr(String(a.rank == null ? 0 : a.rank))}">
+      <div class="hint">90–100 biggest story in the sport today, one a day · 70–89 biggest in its league · 40–69 would lead a quiet day · 10–39 routine · 0 filler. It decays on its own — a 100 holds the lead about 13 hours, then yields to whatever is newer.</div>
+    </div>
+  </div>
+
+  <label>THE ARTICLE</label>
+  <textarea name="text" rows="18">${L.esc(bodyToText(a))}</textarea>
+  <div class="hint">Blank line between paragraphs. Start a line with <b>## </b> to make it a section heading. <b>**bold**</b> works inside a paragraph.</div>
+
+  <label>SOURCES · ONE PER LINE, <b>Name | https://…</b></label>
+  <textarea name="sources" rows="5">${L.esc(srcToText(a))}</textarea>
+  <div class="hint">A line without a link is dropped — a source without a link is not a source.</div>
+
+  <div class="two">
+    <div><label>PHOTO URL</label><input name="photo_url" value="${L.attr(a.photo_url || '')}"></div>
+    <div><label>PHOTO CREDIT</label><input name="photo_credit" value="${L.attr(a.photo_credit || '')}"></div>
+  </div>
+  <label>PHOTO LINK · the original post</label>
+  <input name="photo_link" value="${L.attr(a.photo_link || '')}">
+
+  <div class="btns" style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+    <button class="pub" name="action" value="save" type="submit">SAVE CHANGES</button>
+    <a class="rej ghost" href="/news/${L.attr(a.id)}" target="_blank">PREVIEW ↗</a>
+    <a class="rej ghost" href="/approve">CANCEL</a>
+  </div>
+</form>
+<form class="card" method="POST" action="/approve" style="padding:14px 20px;margin-top:14px;border-color:#4a2020">
+  <input type="hidden" name="csrf" value="${L.attr(csrf)}">
+  <input type="hidden" name="id" value="${L.attr(a.id)}">
+  <div class="drow" style="justify-content:space-between">
+    <span class="meta" style="margin:0">Archiving takes it off the site immediately. Nothing is destroyed — it moves to ARCHIVED at the foot of the desk and can be restored.</span>
+    <button class="rej" name="action" value="archive" type="submit" style="font-family:'Roboto Slab',serif;font-weight:900;font-size:11px;padding:8px 14px;border-radius:5px;border:none;cursor:pointer;flex:none">ARCHIVE</button>
+  </div>
+</form>`;
 }
 
 // Desk-only chrome. It lives here rather than in _css.js so readers never download the
@@ -82,6 +179,14 @@ const DESKCSS = `<style>
 .apr .btns form{display:flex;gap:10px;margin:0}
 .apr .drow{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .apr .ghost{background:transparent;border:1px solid var(--ln);color:var(--ink2)}
+.apr .deskbtn{font-family:'Roboto Slab',serif;font-weight:900;text-transform:uppercase;font-size:10px;padding:7px 11px;border-radius:5px;border:none;cursor:pointer;line-height:1.25;display:inline-block}
+.apr .ed label{display:block;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.14em;color:var(--mut);margin:16px 0 5px}
+.apr .ed input,.apr .ed textarea,.apr .ed select{width:100%;background:var(--k0);border:1px solid var(--ln);color:var(--w);font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.6;padding:10px 12px;outline:none;border-radius:5px;-webkit-appearance:none}
+.apr .ed input:focus,.apr .ed textarea:focus,.apr .ed select:focus{border-color:var(--red)}
+.apr .ed textarea{resize:vertical}
+.apr .ed .hint{font-size:11.5px;color:var(--mut);margin-top:5px;line-height:1.55}
+.apr .ed .two{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+@media(max-width:640px){.apr .ed .two{grid-template-columns:1fr}}
 </style>`;
 
 const P = body => L.page({
@@ -134,6 +239,43 @@ module.exports = async (req, res) => {
       if (!A.csrfOK(req, form.csrf)) return L.ok(res, P(shell('<div class="warnbox">That form was stale — reload the desk and try again.</div>')), 0);
       const id = String(form.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
       const action = String(form.action || '');
+
+      // An edit is not a republish: published_at is left alone, so fixing a typo does not
+      // shove a day-old story back to the top of the site.
+      if (id && action === 'save') {
+        const h = String(form.h || '').trim();
+        if (!h) {
+          const a = await S.anyById(id);
+          return L.ok(res, P(shell(`<div class="warnbox">A headline is not optional — nothing was saved.</div>` + (a ? editPage(a, csrf) : ''))), 0);
+        }
+        const { body, sections } = textToBody(form.text);
+        const sources = textToSrc(form.sources);
+        const league = L.LEAGUES[String(form.league || '')] ? String(form.league) : null;
+        const patch = {
+          h,
+          dek: String(form.dek || '').trim() || null,
+          chip: String(form.chip || '').trim(),
+          rank: Math.max(0, Math.min(100, parseInt(form.rank, 10) || 0)),
+          body, sections,
+          sources: sources.length ? sources : null,
+          photo_url: String(form.photo_url || '').trim() || null,
+          photo_credit: String(form.photo_credit || '').trim() || null,
+          photo_link: String(form.photo_link || '').trim() || null
+        };
+        if (league) patch.league = league;
+        await L.supaWrite(`articles?id=eq.${id}`, 'PATCH', patch);
+        return seeOther(res, `/approve?done=save&id=${encodeURIComponent(id)}`);
+      }
+
+      // Archive is a soft delete on purpose. getArticles() only ever reads `published`, so an
+      // archived story is off the site the moment this returns — but the row is still there,
+      // and one click brings it back. Nothing an editor does in a hurry should be unrecoverable.
+      if (id && ['archive', 'restore'].includes(action)) {
+        await L.supaWrite(`articles?id=eq.${id}`, 'PATCH',
+          action === 'archive' ? { status: 'archived', published_at: null } : { status: 'draft' });
+        return seeOther(res, `/approve?done=${action}&id=${encodeURIComponent(id)}`);
+      }
+
       if (id && ['publish', 'reject', 'unpublish'].includes(action)) {
         const patch = action === 'publish' ? { status: 'published', published_at: new Date().toISOString() }
           : action === 'reject' ? { status: 'rejected' }
@@ -144,13 +286,24 @@ module.exports = async (req, res) => {
       return seeOther(res, '/approve');
     }
 
+    // --- the editor ----------------------------------------------------------
+    const editId = String((req.query && req.query.edit) || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (editId) {
+      const a = await S.anyById(editId).catch(() => null);
+      if (!a) return L.ok(res, P(shell('<div class="warnbox">No article with that id.</div>')), 0, 404);
+      return L.ok(res, P(shell(editPage(a, csrf))), 0);
+    }
+
     const tab = String((req.query && req.query.tab) || '');
     const done = String((req.query && req.query.done) || '');
     const doneId = String((req.query && req.query.id) || '').replace(/[^a-zA-Z0-9_-]/g, '');
     const notice = done && doneId
       ? `<div class="notice">${done === 'publish' ? `Published: ${L.esc(doneId)} — live within a minute.`
         : done === 'reject' ? `Rejected: ${L.esc(doneId)}.`
-          : `Unpublished: ${L.esc(doneId)} — back to drafts.`}</div>`
+          : done === 'save' ? `Saved: ${L.esc(doneId)} — live within a minute if it was published.`
+            : done === 'archive' ? `Archived: ${L.esc(doneId)} — off the site, kept at the foot of this page.`
+              : done === 'restore' ? `Restored: ${L.esc(doneId)} — back in drafts, not yet live.`
+                : `Unpublished: ${L.esc(doneId)} — back to drafts.`}</div>`
       : '';
 
     const nav = `<div class="drow" style="margin:18px 0 4px;justify-content:space-between">
@@ -190,14 +343,21 @@ ${other.length ? `<div class="sect" style="font-size:15px">NOTES FROM THE DESKS<
       return L.ok(res, P(shell(body)), 0);
     }
 
-    const [drafts, pub] = await Promise.all([articles('draft'), articles('published')]);
+    const [drafts, pub, arch] = await Promise.all([
+      articles('draft'), articles('published'), articles('archived').catch(() => [])
+    ]);
     L.R.setCtx({ articles: pub, matches: [] });
     const body = `${nav}${notice}
 <div class="sect" style="font-size:15px">WAITING ON YOU <span class="mr">${drafts.length} DRAFT${drafts.length === 1 ? '' : 'S'}</span></div>
 ${drafts.length ? drafts.map(a => draftCard(a, csrf)).join('') : '<p style="color:var(--mut);margin-top:16px">Queue is clear. The Morning Desk refills it every day.</p>'}
 <div class="sect" style="font-size:15px">RECENTLY PUBLISHED</div>
-${pub.slice(0, 12).map(a => `<div class="card" style="padding:10px 16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px"><a href="/news/${L.attr(a.id)}" target="_blank" style="font-weight:700;color:var(--w);font-size:13px">${a.h}</a>
-<form method="POST" action="/approve" style="margin:0;flex:none"><input type="hidden" name="csrf" value="${L.attr(csrf)}"><input type="hidden" name="id" value="${L.attr(a.id)}"><button class="rej" name="action" value="unpublish" type="submit" style="font-size:10px;padding:6px 10px;border-radius:5px;font-family:'Roboto Slab',serif;font-weight:900;border:none;cursor:pointer">UNPUBLISH</button></form></div></div>`).join('')}`;
+${pub.slice(0, 20).map(a => `<div class="card" style="padding:10px 16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><a href="/news/${L.attr(a.id)}" target="_blank" style="font-weight:700;color:var(--w);font-size:13px;flex:1;min-width:180px">${a.h}</a>
+<div class="drow" style="gap:8px;flex:none"><a class="deskbtn ghost" href="/approve?edit=${L.attr(a.id)}">EDIT</a>
+<form method="POST" action="/approve" style="margin:0;display:flex;gap:8px"><input type="hidden" name="csrf" value="${L.attr(csrf)}"><input type="hidden" name="id" value="${L.attr(a.id)}"><button class="deskbtn rej" name="action" value="unpublish" type="submit">UNPUBLISH</button><button class="deskbtn ghost" name="action" value="archive" type="submit">ARCHIVE</button></form></div></div></div>`).join('')}
+${arch.length ? `<div class="sect" style="font-size:15px">ARCHIVED <span class="mr">${arch.length} · OFF THE SITE, NOT DELETED</span></div>
+${arch.map(a => `<div class="card" style="padding:10px 16px;opacity:.72"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-weight:700;color:var(--ink2);font-size:13px;flex:1;min-width:180px">${a.h}</span>
+<div class="drow" style="gap:8px;flex:none"><a class="deskbtn ghost" href="/approve?edit=${L.attr(a.id)}">EDIT</a>
+<form method="POST" action="/approve" style="margin:0"><input type="hidden" name="csrf" value="${L.attr(csrf)}"><input type="hidden" name="id" value="${L.attr(a.id)}"><button class="deskbtn pub" name="action" value="restore" type="submit">RESTORE</button></form></div></div></div>`).join('')}` : ''}`;
     L.ok(res, P(shell(body)), 0);
   } catch (e) { L.fail(res, e); }
 };
