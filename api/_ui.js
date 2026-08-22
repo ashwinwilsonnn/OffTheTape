@@ -101,7 +101,14 @@ if(nlov){
    .catch(function(){ok.textContent='SIGNUP HICCUP ON OUR SIDE — TRY AGAIN IN A MINUTE.'});
  };
  var seen=false;try{seen=localStorage.getItem('ott_nl')==='1'}catch(e){}
- if(!seen&&location.pathname.indexOf('newsletter')<0)setTimeout(function(){nlov.classList.add('on')},6000);
+ // Six seconds ambushes someone who has not read a word yet. Twenty-five seconds, or the
+ // moment they scroll like they mean it — whichever comes first.
+ var seen2=seen,shown=false;
+ function nlShow(){if(shown||seen2)return;shown=true;nlov.classList.add('on')}
+ if(!seen&&location.pathname.indexOf('newsletter')<0){
+  setTimeout(nlShow,25000);
+  addEventListener('scroll',function(){if(scrollY>1200)nlShow()},{passive:true});
+ }
 }
 
 /* ---------- INLINE NEWSLETTER STRIP ---------- */
