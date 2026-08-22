@@ -105,4 +105,30 @@ module.exports = `
   .tb .tmc{padding:9px 0}
   .tb .rk{font-variant-numeric:tabular-nums}
 }
+
+/* ---- the tagline goes at every width ----
+   "THE HOME OF EVERYTHING VOLLEYBALL" ran above the lead story on every visit, at every
+   size. It is the site talking about itself in the one place the reader came for a story.
+   No masthead we compared against carries a tagline on any page. */
+.kickhome{display:none}
+
+/* ---- tablets get the phone's cuts ----
+   Keyed on touch rather than width, so it catches an iPad in both orientations and never
+   catches a laptop. The league row is the hamburger panel's first level printed twice and
+   the panel is right there; the MOST READ arrows are mouse furniture on a strip you swipe. */
+@media (hover:none) and (pointer:coarse){
+  .qng{display:none}
+  .arrows{display:none}
+}
+
+/* ---- article: things a thumb has to hit ----
+   A well-sourced article prints eight source links at 9.5px in a 19px row, stacked — the
+   hardest thing on the site to tap and the easiest to mis-tap into the wrong publisher.
+   The tag row was 26px. Neither had anything to do with how they look; only how they sit. */
+@media (hover:none) and (pointer:coarse){
+  .srcs{padding:2px 0 2px 12px}
+  .srcs a{padding:8px 0;font-size:10.5px}
+  .tagrow{gap:9px}
+  .tagrow a{padding:9px 12px}
+}
 `;
