@@ -37,10 +37,14 @@ const die = "this.classList.add('dead')";
 // ---------- articles: fetch + normalise into the shape the prototype renderers expect ----------
 // Plain-text fields are escaped once here, so no renderer has to remember to do it.
 // The unescaped headline survives as .hRaw for <title>, meta tags and JSON-LD.
+const HEAT = require('./_heat.js');
+
 async function getArticles(status) {
-  // Running order is an editorial decision, not whatever Postgres hands back first.
-  // rank wins; ties fall back to publish time, then to when the desk filed it.
-  const rows = await supaGet(`articles?select=*&status=eq.${status || 'published'}&order=rank.desc,published_at.desc.nullslast,created_at.desc`);
+  // Postgres hands back recency; _heat.js decides the running order. rank used to win
+  // absolutely, which is how a GAMEDAY preview filed at rank 100 was still leading the site
+  // 29 hours later, above the recaps of the matches it had previewed. Now rank is a thumb on
+  // the scale that fades with the story instead of pinning it.
+  const rows = await supaGet(`articles?select=*&status=eq.${status || 'published'}&order=published_at.desc.nullslast,created_at.desc`);
   return rows.map(a => ({
     ...a,
     hRaw: a.h || '',
@@ -51,7 +55,7 @@ async function getArticles(status) {
     lg: a.league,
     t1: a.t1 || null, t2: a.t2 || null,
     ph: a.photo_url ? { src: a.photo_url, cr: esc(a.photo_credit || ''), link: a.photo_link || null } : null
-  }));
+  })).sort(HEAT.byHeat);
 }
 // Team identity lives in one place now — see _teamkey.js for why. The board used to key a
 // match on `a_team || a_name`, which gave 'tamu' for a logo-linked copy and 'ta&m' for a
@@ -221,6 +225,6 @@ function fail(res, e) {
 
 module.exports = {
   DATA, LEAGUES, TEAMS, CONF, CONFORDER, VNL, POLLW, POLLM, STAND_LOVB, STAND_MLV, VNLW, VNLM, CLASSBOARD, COMMITWIRE,
-  R, supaGet, supaWrite, esc, attr, stripEmoji, die, getArticles, getMatches,
+  R, HEAT, supaGet, supaWrite, esc, attr, stripEmoji, die, getArticles, getMatches,
   header, panel, footer, nlPopup, page, ok, fail, SITE, LAUNCHED
 };
