@@ -147,6 +147,17 @@ function cov(a,lead,hero){
   ${(()=>{const LG=LEAGUES[a.lg];const im=t?t.img:LG.img;const fb=t?t.s:LG.n[0];return im?`<div class="pl" style="left:auto;right:12px;top:auto;bottom:34px;transform:none;width:46px;height:46px;box-shadow:none"><img src="${im}" alt="" onerror="${die}"><span class="mg" style="font-size:13px">${fb}</span></div>`:''})()}
   <div class="mono" style="position:absolute;left:14px;bottom:12px;font-size:8px;letter-spacing:.13em;color:rgba(255,255,255,.75)">${a.m}</div></div>`
 }
+// _data.js carries recruit names in two shapes and both shout: the commit wire stores
+// "OMORUYI, KENDALL" and the class board stores "KENDALL OMORUYI". Readers get one shape,
+// spelled like a person. Imperfect on names like McKenzie, which is still better than
+// MCKENZIE, and a lot better than "⭐ OMORUYI, KENDALL → NEBRASKA".
+function personName(s) {
+  let t = String(s || '').trim();
+  const c = t.indexOf(',');
+  if (c > 0) t = t.slice(c + 1).trim() + ' ' + t.slice(0, c).trim();
+  return t.toLowerCase().replace(/(^|[\s'’\-])([a-z])/g, (m, a, b) => a + b.toUpperCase());
+}
+
 // Same rule _lib.js uses for <title>: a trailing pictograph, and only a trailing one, so an
 // emoji inside a headline is left alone. Declared locally because _lib.js requires this file.
 const noEmoji = s => String(s || '').replace(/\s*\p{Extended_Pictographic}️?\s*$/u, '');
@@ -291,13 +302,13 @@ function pgHub(k,tab){
   else if(k==='mlv'){body=`<div class="sect" style="font-size:15px;margin-top:20px">MLV 2026 — FINAL <span class="mr" style="color:#9fdd8e">REAL · FULL STANDINGS</span></div><div class="tbwrap"><table class="tb"><tr><th>PL</th><th>TEAM</th><th>FINISH</th></tr>${STAND_MLV.map(([id,fin],i)=>{const t=TEAMS[id];return `<tr><td class="rk">${i+1}</td><td><a class="tmc" href="/team/${id}">${tlogo(t,22)}${t.n}</a></td><td class="fpv">${fin}</td></tr>`}).join('')}</table></div>`}
   else if(k==='intl'){const vt=(rows,ttl)=>`<div class="sect" style="font-size:15px;margin-top:20px">${ttl} <span class="mr" style="color:#9fdd8e">REAL</span></div><div class="tbwrap"><table class="tb"><tr><th>PL</th><th>TEAM</th><th>FINISH</th></tr>${rows.map(([n,fin],i)=>`<tr><td class="rk">${i+1}</td><td><span class="tmc">${VFLAG[n]?`<img src="${FP(VFLAG[n])}" alt="" style="width:24px;height:16px;object-fit:cover;border:1px solid #262626" onerror="${die}">`:''}<span class="mfb" style="width:22px;height:22px;font-size:8px;background:#262626">${n.slice(0,2).toUpperCase()}</span>${n}</span></td><td class="fpv">${fin}</td></tr>`).join('')}</table></div>`;
   body=vt(VNLW,'WOMEN’S VNL 2026 — FINAL FOUR')+vt(VNLM,'MEN’S VNL 2026 — FINAL FOUR')+`<p style="color:var(--mut);font-size:12px;margin-top:10px">Vargas: 33 points in the women’s final — most ever in a VNL final. Full tables sync from the FIVB VIS feed.</p>`}
-  else if(k==='recruit'){body=`<div class="sect" style="font-size:15px;margin-top:20px">2027 CLASS RANKINGS — THE BOARD <span class="mr" style="color:#9fdd8e">REAL · RANKS CITED PER ROW</span></div><div class="tbwrap"><table class="tb"><tr><th>NATL RK</th><th>RECRUIT</th><th>POS</th><th>HOMETOWN</th><th>STATUS</th><th>RANK SOURCE</th></tr>${CLASSBOARD.map(([r,n,pos,hm,st,tid,srcr])=>`<tr><td class="rk">${r}</td><td style="font-weight:700">${n}</td><td class="fpv">${pos}</td><td class="fpv">${hm}</td><td>${tid?`<span class="tmc">${tlogo(TEAMS[tid],20)}<span style="font-size:11px;font-weight:700">${st}</span></span>`:`<span class="fpv">${st}</span>`}</td><td class="fpv">${srcr}</td></tr>`).join('')}</table></div><p style="color:var(--mut);font-size:12px;margin-top:10px">Ranks: PrepDig public 2027 national list + PrepVolleyball; commitments per SI / Lincoln Journal Star. OTT reports verified public commitments — it does not fabricate rankings.</p>`}
+  else if(k==='recruit'){body=`<div class="sect" style="font-size:15px;margin-top:20px">2027 CLASS RANKINGS — THE BOARD <span class="mr" style="color:#9fdd8e">REAL · RANKS CITED PER ROW</span></div><div class="tbwrap"><table class="tb"><tr><th>NATL RK</th><th>RECRUIT</th><th>POS</th><th>HOMETOWN</th><th>STATUS</th><th>RANK SOURCE</th></tr>${CLASSBOARD.map(([r,n,pos,hm,st,tid,srcr])=>`<tr><td class="rk">${r}</td><td style="font-weight:700">${personName(n)}</td><td class="fpv">${pos}</td><td class="fpv">${hm}</td><td>${tid?`<span class="tmc">${tlogo(TEAMS[tid],20)}<span style="font-size:11px;font-weight:700">${st}</span></span>`:`<span class="fpv">${st}</span>`}</td><td class="fpv">${srcr}</td></tr>`).join('')}</table></div><p style="color:var(--mut);font-size:12px;margin-top:10px">Ranks: PrepDig public 2027 national list + PrepVolleyball; commitments per SI / Lincoln Journal Star. OTT reports verified public commitments — it does not fabricate rankings.</p>`}
   else{body=`<p style="color:var(--ink2);margin-top:20px;font-size:14px">Rankings publish here weekly in season.</p>`}
  }else if(tab==='teams'){
   if(k==='intl'){body=`<div class="sect" style="font-size:15px;margin-top:20px">VNL 2026 FIELDS <span class="mr">FLAGS — PUBLIC DOMAIN</span></div><div class="tgrid">${VNL.map(([n,f])=>`<span class="tcard" style="--tc:#262626"><span class="lgw"><img src="${FP(f)}" alt="" style="max-height:34px;border:1px solid #262626" onerror="${die}"><span class="mfb" style="background:#262626;font-size:11px">${n.slice(0,2).toUpperCase()}</span></span><span class="n">${n}</span><span class="r">VNL 2026</span></span>`).join('')}</div>`}
   else{body=`<p style="color:var(--ink2);margin-top:20px;font-size:14px">Use the TEAMS dropdown in the bar above.</p>`}
  }else if(tab==='portal'){
-  if(k==='recruit'){body=`<div class="sect" style="font-size:15px;margin-top:20px">THE COMMIT WIRE <span class="mr" style="color:#9fdd8e">REAL COMMITMENTS · SOURCED</span></div><div class="rail">${COMMITWIRE.map(([n,pos,tid,srcr])=>`<a href="/hub/recruit"><span class="rlg"><img src="${TEAMS[tid].img}" alt="" onerror="${die}"><span class="mfb" style="background:${TEAMS[tid].c1}"></span></span><span><span class="h">⭐ ${n} → ${TEAMS[tid].n.toUpperCase()}</span><span class="m" style="display:block">${pos} · ${srcr}</span></span></a>`).join('')}</div><div class="sect" style="font-size:15px;margin-top:28px">LATEST</div><div class="grid3">${ARTICLES.filter(a=>a.lg==='recruit').map(a=>acard(a,'sm')).join('')}</div>`}
+  if(k==='recruit'){body=`<div class="sect" style="font-size:15px;margin-top:20px">THE COMMIT WIRE <span class="mr" style="color:#9fdd8e">REAL COMMITMENTS · SOURCED</span></div><div class="rail">${COMMITWIRE.map(([n,pos,tid,srcr])=>`<a href="/hub/recruit"><span class="rlg"><img src="${TEAMS[tid].img}" alt="" onerror="${die}"><span class="mfb" style="background:${TEAMS[tid].c1}"></span></span><span><span class="h">⭐ ${personName(n)} → ${TEAMS[tid].n}</span><span class="m" style="display:block">${pos} · ${srcr}</span></span></a>`).join('')}</div><div class="sect" style="font-size:15px;margin-top:28px">LATEST</div><div class="grid3">${ARTICLES.filter(a=>a.lg==='recruit').map(a=>acard(a,'sm')).join('')}</div>`}
   else{body=`<div class="sect" style="font-size:15px;margin-top:20px">${L.portal.toUpperCase()} <span class="mr">SOURCED ONLY — EVERY ITEM CARRIES ITS SOURCE</span></div><p style="color:var(--ink2);margin-top:14px;font-size:14px">Nothing on the ${L.portal.toLowerCase()} wire that we can source yet. Items appear here only with a named source attached.</p><div class="grid3" style="margin-top:24px">${arts.slice(0,3).map(a=>acard(a,'sm')).join('')}</div>`}
  }
  return kick+body;
@@ -402,7 +413,7 @@ function pg404(){return `<div style="text-align:center;padding:60px 0"><div clas
 
 module.exports = {
   setCtx, art, toMatch, normDay, ageLabel, tlogo, tlg, die, STAR, FP, VFLAG,
-  cov, photoCov, acard, railItem, mcard, tickerHTML, tickerOrder, noEmoji, nlStrip, embedsHTML,
+  cov, photoCov, acard, railItem, mcard, tickerHTML, tickerOrder, noEmoji, personName, nlStrip, embedsHTML,
   optImg, imgHostOK, IMG_HOSTS,
   pgHome, pgHub, pgScores, pgTeam, pgArticle, pgNews, pgAbout, pg404
 };
