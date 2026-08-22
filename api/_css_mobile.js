@@ -1,7 +1,9 @@
-// Responsive refinements, layered after the prototype stylesheet.
+// The override layer, appended after the prototype stylesheet.
 //
-// Kept in its own file so a phone/tablet tweak is a 2KB change instead of re-transferring
-// the 34KB stylesheet. Everything here overrides by source order, not by !important.
+// Started as responsive-only and now also carries type decisions that apply at every width —
+// the filename is a fossil. Kept separate because a change here is a 3KB transfer instead of
+// re-sending the 33KB stylesheet, which is worth more than a tidy name. Everything overrides
+// by source order at equal specificity, not by !important.
 //
 // Measured in real 390px and 820px viewports, not guessed.
 module.exports = `
@@ -16,7 +18,6 @@ module.exports = `
   .secmod.rev{grid-template-columns:1fr 1.5fr}
   .secmod.rev .stack{order:0}
   .reclay{grid-template-columns:1.1fr 1fr;gap:20px}
-  .lead .ttl{font-size:22px}
 }
 
 /* ---- touch ----
@@ -59,4 +60,33 @@ module.exports = `
    vertical swipes back to the page and keeps horizontal ones for the ticker. */
 .tick.tkmove{overflow:hidden;touch-action:pan-y;cursor:auto;-webkit-overflow-scrolling:auto}
 .tick.tkmove .tktrack{will-change:transform;transform:translate3d(0,0,0)}
+
+/* ---- headlines in mixed case ----
+   When every headline shouts, none of them do. The copy was always written in mixed case in
+   the database — the caps were a stylesheet decision layered on top — so this is just a matter
+   of letting the words through. Section labels, chips, the ticker and the wordmark keep their
+   caps: that is furniture, and small caps still do real work there.
+   Mixed case reads smaller than caps at the same size, so the type steps up to compensate, and
+   slab at display size wants its tracking pulled in slightly. */
+.acard .ttl{text-transform:none;font-size:17px;letter-spacing:-.01em;line-height:1.2}
+.acard.sm .ttl{font-size:15px}
+/* This clamp lands at ~22px across the iPad band, which is what the flat .lead .ttl override
+   in the iPad block above used to set — media queries add no specificity, so that rule was
+   being overridden by this one anyway. Removed it rather than leave a line that does nothing. */
+.lead .ttl{font-size:clamp(20px,2.7vw,27px);line-height:1.14}
+.rail a .h{text-transform:none;font-size:14.5px;letter-spacing:-.005em;line-height:1.22}
+.abody h1{text-transform:none;letter-spacing:-.015em}
+.abody h2{text-transform:none;letter-spacing:-.01em}
+.cv .hl{text-transform:none;letter-spacing:-.01em}
+
+/* ---- phone: less chrome standing between the reader and the first story ----
+   The global league row is the hamburger panel's own first level, printed a second time. On a
+   hub the same element is the tab bar — Scores, Rankings, Teams — which is real navigation, so
+   only the duplicate goes: .qng is the league list, .qnt is the tabs.
+   The home tagline goes with it. Together they are ~73px, which on a 390px phone is the
+   difference between meeting the lead story above the fold and scrolling to find it. */
+@media(max-width:760px){
+  .qng{display:none}
+  .kickhome{display:none}
+}
 `;
