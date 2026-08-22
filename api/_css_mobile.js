@@ -52,4 +52,11 @@ module.exports = `
   .abody .byl{line-height:1.7}
   .cols{gap:20px}
 }
+
+/* ---- ticker motion on touch ----
+   The crawl is a transform on the track, so the container must stop being a scroller —
+   two things moving the same strip would fight each other. touch-action:pan-y hands
+   vertical swipes back to the page and keeps horizontal ones for the ticker. */
+.tick.tkmove{overflow:hidden;touch-action:pan-y;cursor:auto;-webkit-overflow-scrolling:auto}
+.tick.tkmove .tktrack{will-change:transform;transform:translate3d(0,0,0)}
 `;

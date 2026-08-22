@@ -7,12 +7,15 @@ var $=function(s){return document.querySelector(s)};
 var die="this.classList.add('dead')";
 
 /* ---------- TICKER ----------
-   A finger is not a mouse. The old version ran an auto-scroll loop and a scroll handler that
-   rewrote scrollLeft to fake an infinite loop — and on iOS, writing scrollLeft while a flick
-   or its momentum is in flight cancels the gesture outright. That is why the ticker felt dead
-   on a phone: every swipe was being killed mid-flick by the site's own code.
-   On a touch screen it is now a plain native scroller: one copy of the cards, no auto-scroll,
-   nothing ever writes scrollLeft. Desktop keeps the drag and the endless loop. */
+   A finger is not a mouse. The original ran an auto-scroll loop and a scroll handler that both
+   rewrote scrollLeft to fake an infinite loop — and on iOS, writing scrollLeft while a flick or
+   its momentum is in flight cancels the gesture outright. The ticker was killing every swipe
+   with its own code. Removing the loop fixed the swipe and lost the crawl, which is the half of
+   it people actually notice.
+   So on touch nothing goes near scrollLeft. The container stops scrolling and the track is
+   moved with a transform: the crawl is a transform, the drag is a transform, the flick is a
+   transform. Because the track ships doubled, wrapping is one modulo and never shows a seam.
+   Desktop keeps its scrollLeft loop, where it has always worked. */
 (function(){
  var tk=$('#tick'),tr=$('#tkt');
  if(!tk||!tr)return;
@@ -20,12 +23,55 @@ var die="this.classList.add('dead')";
  var touch=matchMedia('(hover: none) and (pointer: coarse)').matches;
 
  if(touch){
-  // The track ships doubled so the desktop loop can wrap seamlessly. With no loop to feed,
-  // the second copy is just the same scores again — drop it so a swipe reaches a real end.
-  var kids=tr.children,n=kids.length/2;
-  if(n>=1&&n===Math.floor(n))for(var i=kids.length-1;i>=n;i--)tr.removeChild(kids[i]);
-  tk.style.cursor='auto';
-  return;                       // no loop, no wrap, no scrollLeft writes. Native momentum only.
+  tk.classList.add('tkmove');                       // overflow:hidden + touch-action:pan-y
+  var SPD=32;                                       // px per second — a crawl, not a slide
+  var C=0,W=0;
+  var measure=function(){C=tr.scrollWidth/2;W=tk.clientWidth};
+  measure();
+  addEventListener('resize',measure);addEventListener('load',measure);
+  // Card widths move when the webfonts swap in, and the loop length is measured in pixels.
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(measure);
+  var pos=0,vel=0,down=false,sx=0,spos=0,moved=0,lt=0,lx=0,lts=0,lv=0,hold=0;
+  // pos runs negative forever; the modulo folds it back into one copy width, so the second
+  // copy is always the thing filling the right-hand edge. No jump, no reset, no seam.
+  var put=function(){if(!C)return;var x=pos%C;if(x>0)x-=C;tr.style.transform='translate3d('+x.toFixed(2)+'px,0,0)'};
+  // Fewer matches than fit on screen: there is nothing to loop, and the doubled track would
+  // show the same fixtures twice side by side. Drop the spare copy and stand still.
+  var dead=false;
+  var strip=function(){
+   dead=true;tr.style.transform='';
+   var kids=tr.children,n=kids.length/2;
+   if(n>=1&&n===Math.floor(n))for(var i=kids.length-1;i>=n;i--)tr.removeChild(kids[i]);
+  };
+  var frame=function(t){
+   if(dead)return;
+   requestAnimationFrame(frame);
+   if(!C)return;
+   if(C<W)return strip();
+   var dt=lt?Math.min(64,t-lt):16;lt=t;
+   if(down)return;                                  // the finger owns it
+   if(vel){                                         // our own inertia, since nothing is scrolling
+    pos+=vel*dt;vel*=Math.pow(.995,dt);
+    if(Math.abs(vel)<.02){vel=0;hold=t+900}         // let a flick settle before taking it back
+   }else if(!rm&&t>hold){pos-=SPD*dt/1000}
+   put();
+  };
+  tk.addEventListener('pointerdown',function(e){
+   down=true;vel=0;moved=0;sx=e.clientX;spos=pos;lx=e.clientX;lts=e.timeStamp||0;lv=0});
+  addEventListener('pointermove',function(e){
+   if(!down)return;
+   var dx=e.clientX-sx;moved=Math.max(moved,Math.abs(dx));
+   // px per millisecond off the clock, not per event — a 120Hz phone fires twice as often
+   // as a 60Hz one and would otherwise read as half the flick.
+   var ts=e.timeStamp||0,d=ts-lts;
+   if(d>0){lv=(e.clientX-lx)/d;lx=e.clientX;lts=ts}
+   pos=spos+dx;put()});
+  var lift=function(){if(!down)return;down=false;hold=0;vel=Math.max(-3,Math.min(3,lv))};
+  addEventListener('pointerup',lift);addEventListener('pointercancel',lift);
+  // A swipe that ends on a card is a swipe, not a tap.
+  tk.addEventListener('click',function(e){if(moved>8){e.preventDefault();e.stopPropagation();moved=0}},true);
+  requestAnimationFrame(frame);
+  return;                                           // scrollLeft is never written on touch
  }
 
  var auto=!rm,tmr=null,drag=false,sx=0,sl=0,moved=0;
