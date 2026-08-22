@@ -2,6 +2,7 @@
 //   /approve            drafts, previewed exactly as they will publish
 //   /approve?tab=data   what the Data Desk changed, feed health, the live board
 //   /approve?edit=<id>  edit any article in any state, or archive it
+//   /approve?rewrite=<id>  review a rewrite a desk staged against a live article
 //
 // Auth: the PIN is posted once and exchanged for a signed HttpOnly cookie (see _auth.js).
 // It never appears in a URL, so it never reaches browser history, Vercel's request logs, or
@@ -130,7 +131,7 @@ function editPage(a, csrf) {
     <div>
       <label>CHIP</label>
       <input name="chip" value="${L.attr((a.chip || '').replace(/&amp;/g, '&'))}">
-      <div class="hint">Reads <b>LEAGUE · KIND</b>. The KIND half sets how long this stays on the front page: GAMEDAY/PREVIEW 16h · RECAP/FINAL 30h · BREAKING/COMMIT/INJURY 48h · CHAMPIONSHIP 72h · RANKINGS 96h · ARGUMENT/ANALYSIS/PLAYER 110h. Anything else falls back to 36h.</div>
+      <div class="hint">Reads <b>LEAGUE · KIND</b>. The KIND half sets how long this stays on the front page: GAMEDAY/PREVIEW 16h · RECAP/FINAL 30h · BREAKING/COMMIT/INJURY 48h · CHAMPIONSHIP 72h · RANKINGS 96h · ARGUMENT/ANALYSIS/PLAYER/LOOKAHEAD 110h. Anything else falls back to 36h. PREVIEW means tonight — for an event days away use LOOKAHEAD.</div>
     </div>
     <div>
       <label>LEAGUE</label>
@@ -188,6 +189,85 @@ const DESKCSS = `<style>
 .apr .ed .two{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
 @media(max-width:640px){.apr .ed .two{grid-template-columns:1fr}}
 </style>`;
+
+// ── STAGED REWRITES ───────────────────────────────────────────────────────────
+// The morning desk refused to rewrite published prose in place, and it was right to: leaving
+// new unreviewed text on a live page is publishing, whatever the row's status says. So a desk
+// now writes its rewrite into articles.pending instead. Nothing public reads that column, so
+// the rewrite sits invisible until Ashwin taps APPLY here. Option B survives a bulk rewrite.
+
+const PENDING_FIELDS = ['h', 'dek', 'chip', 'sections', 'sources'];   // whitelist — see applyPending
+
+const prose = a => a && a.sections
+  ? a.sections.flatMap(s => (s.h2 ? ['## ' + s.h2] : []).concat(s.paras || []))
+  : ((a && a.body) || []);
+
+// Paragraph-level LCS. Twelve rewrites is a lot to read twice each, so the review shows what
+// actually moved rather than two walls of text side by side.
+function lcsDiff(a, b) {
+  const n = a.length, m = b.length;
+  if (n * m > 40000) return b.map(s => ({ t: 'add', s })).concat(a.map(s => ({ t: 'del', s })));
+  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out = []; let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ t: 'same', s: a[i] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ t: 'del', s: a[i] }); i++; }
+    else { out.push({ t: 'add', s: b[j] }); j++; }
+  }
+  while (i < n) out.push({ t: 'del', s: a[i++] });
+  while (j < m) out.push({ t: 'add', s: b[j++] });
+  return out;
+}
+
+const fieldRow = (label, was, now) => was === now ? '' : `<tr><td style="font-weight:700;white-space:nowrap">${label}</td><td class="fpv">${L.esc(was || '—')}</td><td style="color:#9fdd8e">${L.esc(now || '—')}</td></tr>`;
+
+function rewritePage(a, csrf) {
+  const p = a.pending || {};
+  const rows = PENDING_FIELDS.filter(f => f !== 'sections' && f !== 'sources')
+    .map(f => fieldRow(f.toUpperCase(), f === 'h' ? a.hRaw : f === 'dek' ? a.dekRaw : a[f], p[f])).join('');
+  const diff = p.sections ? lcsDiff(prose(a), prose({ sections: p.sections })) : [];
+  const moved = diff.filter(d => d.t !== 'same').length;
+  const line = d => {
+    const heading = /^## /.test(d.s);
+    const txt = L.esc(heading ? d.s.slice(3) : d.s);
+    const mark = d.t === 'add' ? '+' : d.t === 'del' ? '−' : ' ';
+    const style = d.t === 'add' ? 'color:#9fdd8e;border-left:2px solid #9fdd8e'
+      : d.t === 'del' ? 'color:#FFB4BE;border-left:2px solid #FFB4BE;text-decoration:line-through;opacity:.75'
+        : 'color:var(--mut);border-left:2px solid var(--ln)';
+    return `<p style="${style};padding:2px 0 2px 10px;margin:7px 0;font-size:13.5px;line-height:1.6${heading ? ';font-weight:900;text-transform:uppercase;font-size:12px;letter-spacing:.04em' : ''}"><span style="font-family:'JetBrains Mono',monospace;opacity:.6">${mark}</span> ${txt}</p>`;
+  };
+  const srcWas = (a.sources || []).map(x => x.name).join(', ');
+  const srcNow = (p.sources || []).map(x => x.name).join(', ');
+  return `<div class="sect" style="font-size:15px">REWRITE STAGED <span class="mr">${L.esc(a.id)} · ${L.esc(String(a.status || '').toUpperCase())}</span></div>
+${p.why ? `<div class="notice">${L.esc(p.why)}${p.by ? ` — ${L.esc(p.by)}` : ''}</div>` : ''}
+<div class="card" style="padding:16px">
+${rows || (p.sections ? '' : '<p style="color:var(--mut)">Nothing outside the body changed.</p>')}
+${rows ? `<div class="tbwrap"><table class="tb"><tr><th>FIELD</th><th>NOW ON THE SITE</th><th>PROPOSED</th></tr>${rows}</table></div>` : ''}
+${srcWas !== srcNow ? `<p style="font-size:12px;color:var(--mut);margin-top:12px"><b style="color:var(--ink2)">SOURCES</b> ${L.esc(srcWas || 'none')} → <span style="color:#9fdd8e">${L.esc(srcNow || 'none')}</span></p>` : ''}
+${p.sections ? `<div style="margin-top:14px"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:var(--mut);margin-bottom:8px">BODY · ${moved} PARAGRAPH${moved === 1 ? '' : 'S'} MOVED · STRUCK THROUGH IS WHAT GOES</div>${diff.map(line).join('')}</div>` : ''}
+<div class="drow" style="gap:10px;margin-top:18px;flex-wrap:wrap">
+  <form method="POST" action="/approve" style="margin:0;display:flex;gap:10px"><input type="hidden" name="csrf" value="${L.attr(csrf)}"><input type="hidden" name="id" value="${L.attr(a.id)}">
+    <button class="deskbtn pub" name="action" value="applyrw" type="submit">APPLY THE REWRITE</button>
+    <button class="deskbtn rej" name="action" value="droprw" type="submit">DISCARD IT</button></form>
+  <a class="deskbtn ghost" href="/approve?edit=${L.attr(a.id)}">EDIT BY HAND INSTEAD</a>
+  <a class="deskbtn ghost" href="/news/${L.attr(a.id)}" target="_blank">SEE IT LIVE</a>
+</div>
+<p style="color:var(--mut);font-size:11.5px;margin-top:12px">Applying replaces the text on the live page. It does not touch the publish date, so the story keeps its place in the running order.</p>
+</div>`;
+}
+
+const rewriteRow = a => {
+  const p = a.pending || {};
+  const changed = [p.h && p.h !== a.hRaw ? 'headline' : '', p.dek && p.dek !== a.dekRaw ? 'dek' : '',
+  p.chip && p.chip !== a.chip ? 'chip' : '', p.sections ? 'body' : '', p.sources ? 'sources' : ''].filter(Boolean).join(' · ');
+  return `<div class="card" style="padding:10px 16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+  <span style="flex:1;min-width:200px"><span style="font-weight:700;color:var(--w);font-size:13px">${a.h}</span>
+  <span style="display:block;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;color:var(--mut);margin-top:3px">${L.esc(String(a.status || '').toUpperCase())} · ${L.esc(changed || 'no change detected')}</span></span>
+  <a class="deskbtn pub" href="/approve?rewrite=${L.attr(a.id)}" style="flex:none">REVIEW</a></div></div>`;
+};
 
 const P = body => L.page({
   title: 'The Desk — OTT', desc: '', canonical: L.SITE, ctx: {}, body, noindex: true,
@@ -276,6 +356,25 @@ module.exports = async (req, res) => {
         return seeOther(res, `/approve?done=${action}&id=${encodeURIComponent(id)}`);
       }
 
+      // Applying a staged rewrite. The whitelist is the point: a desk cannot smuggle
+      // status or published_at through this column, so applying is always a text change and
+      // never a publish. An unpublished article stays unpublished.
+      if (id && action === 'applyrw') {
+        const a = await S.anyById(id);
+        const p = (a && a.pending) || null;
+        if (!p) return seeOther(res, '/approve');
+        const patch = { pending: null, pending_at: null };
+        for (const f of PENDING_FIELDS) if (p[f] !== undefined) patch[f] = p[f];
+        if (patch.sections) patch.body = null;          // sections wins; don't leave a stale flat body
+        if (patch.sources && !patch.sources.length) patch.sources = null;
+        await L.supaWrite(`articles?id=eq.${id}`, 'PATCH', patch);
+        return seeOther(res, `/approve?done=applyrw&id=${encodeURIComponent(id)}`);
+      }
+      if (id && action === 'droprw') {
+        await L.supaWrite(`articles?id=eq.${id}`, 'PATCH', { pending: null, pending_at: null });
+        return seeOther(res, `/approve?done=droprw&id=${encodeURIComponent(id)}`);
+      }
+
       if (id && ['publish', 'reject', 'unpublish'].includes(action)) {
         const patch = action === 'publish' ? { status: 'published', published_at: new Date().toISOString() }
           : action === 'reject' ? { status: 'rejected' }
@@ -294,6 +393,14 @@ module.exports = async (req, res) => {
       return L.ok(res, P(shell(editPage(a, csrf))), 0);
     }
 
+    const rwId = String((req.query && req.query.rewrite) || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (rwId) {
+      const a = await S.anyById(rwId).catch(() => null);
+      if (!a) return L.ok(res, P(shell('<div class="warnbox">No article with that id.</div>')), 0, 404);
+      if (!a.pending) return L.ok(res, P(shell(`<div class="warnbox">No rewrite is staged against ${L.esc(rwId)} — it may already have been applied.</div>`)), 0);
+      return L.ok(res, P(shell(rewritePage(a, csrf))), 0);
+    }
+
     const tab = String((req.query && req.query.tab) || '');
     const done = String((req.query && req.query.done) || '');
     const doneId = String((req.query && req.query.id) || '').replace(/[^a-zA-Z0-9_-]/g, '');
@@ -301,9 +408,11 @@ module.exports = async (req, res) => {
       ? `<div class="notice">${done === 'publish' ? `Published: ${L.esc(doneId)} — live within a minute.`
         : done === 'reject' ? `Rejected: ${L.esc(doneId)}.`
           : done === 'save' ? `Saved: ${L.esc(doneId)} — live within a minute if it was published.`
-            : done === 'archive' ? `Archived: ${L.esc(doneId)} — off the site, kept at the foot of this page.`
-              : done === 'restore' ? `Restored: ${L.esc(doneId)} — back in drafts, not yet live.`
-                : `Unpublished: ${L.esc(doneId)} — back to drafts.`}</div>`
+            : done === 'applyrw' ? `Rewrite applied to ${L.esc(doneId)} — the text changed, the publish date did not.`
+              : done === 'droprw' ? `Rewrite discarded for ${L.esc(doneId)} — the live version is untouched.`
+                : done === 'archive' ? `Archived: ${L.esc(doneId)} — off the site, kept at the foot of this page.`
+                  : done === 'restore' ? `Restored: ${L.esc(doneId)} — back in drafts, not yet live.`
+                    : `Unpublished: ${L.esc(doneId)} — back to drafts.`}</div>`
       : '';
 
     const nav = `<div class="drow" style="margin:18px 0 4px;justify-content:space-between">
@@ -343,11 +452,15 @@ ${other.length ? `<div class="sect" style="font-size:15px">NOTES FROM THE DESKS<
       return L.ok(res, P(shell(body)), 0);
     }
 
-    const [drafts, pub, arch] = await Promise.all([
-      articles('draft'), articles('published'), articles('archived').catch(() => [])
+    const [drafts, pub, arch, pend] = await Promise.all([
+      articles('draft'), articles('published'), articles('archived').catch(() => []),
+      S.withPending().catch(() => [])
     ]);
     L.R.setCtx({ articles: pub, matches: [] });
     const body = `${nav}${notice}
+${pend.length ? `<div class="sect" style="font-size:15px">REWRITES WAITING <span class="mr">${pend.length} · STAGED, NOT LIVE</span></div>
+<p style="color:var(--mut);font-size:11.5px;margin:-4px 0 12px;max-width:60ch">A desk has reworked these. Nobody has read the new version but you — it stays invisible until you apply it.</p>
+${pend.map(rewriteRow).join('')}` : ''}
 <div class="sect" style="font-size:15px">WAITING ON YOU <span class="mr">${drafts.length} DRAFT${drafts.length === 1 ? '' : 'S'}</span></div>
 ${drafts.length ? drafts.map(a => draftCard(a, csrf)).join('') : '<p style="color:var(--mut);margin-top:16px">Queue is clear. The Morning Desk refills it every day.</p>'}
 <div class="sect" style="font-size:15px">RECENTLY PUBLISHED</div>
