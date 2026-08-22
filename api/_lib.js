@@ -90,6 +90,10 @@ function tabsFor(k) {
     : [['', 'HOME'], ['scores', 'SCORES'], ['rankings', 'RANKINGS'], ['portal', String(L.portal || 'Portal').toUpperCase()]];
 }
 // The nav switches context server-side: league bar on hub and team pages, site bar elsewhere.
+// Those two are not the same object wearing different labels. The site bar (.qng) is the
+// hamburger panel's own first level printed a second time, so a phone can drop it without
+// losing anything; the league bar (.qnt) is how you move between a league's tabs, and dropping
+// it would strand the reader. The stylesheet needs to tell them apart.
 function header(ctx) {
   ctx = ctx || {};
   const k = ctx.lg && LEAGUES[ctx.lg] ? ctx.lg : null;
@@ -99,9 +103,7 @@ function header(ctx) {
   } else {
     const L = LEAGUES[k], tab = ctx.kind === 'hub' ? (ctx.tab || '') : '';
     const rows = teamRows(k);
-    nav = `<a class="qlg" href="/hub/${k}">${L.img ? `<img src="${attr(L.img)}" alt="" onerror="${die}">` : ''}${esc(L.n)}</a>
- ${tabsFor(k).map(([u, n]) => `<a class="${ctx.kind === 'hub' && tab === u ? 'on' : ''}" href="/hub/${k}${u ? '/' + u : ''}">${n}</a>`).join('')}
- ${rows ? `<button id="tddbtn" onclick="tddToggle()">TEAMS <span style="font-size:8px">▾</span></button>` : ''}`;
+    nav = `<a class="qlg" href="/hub/${k}">${L.img ? `<img src="${attr(L.img)}" alt="" onerror="${die}">` : ''}${esc(L.n)}</a>\n ${tabsFor(k).map(([u, n]) => `<a class="${ctx.kind === 'hub' && tab === u ? 'on' : ''}" href="/hub/${k}${u ? '/' + u : ''}">${n}</a>`).join('')}\n ${rows ? `<button id="tddbtn" onclick="tddToggle()">TEAMS <span style="font-size:8px">▾</span></button>` : ''}`;
     if (rows) dd = `<button class="tddx" onclick="tddClose()" aria-label="close">✕</button><div class="tddw">${rows}</div>`;
   }
   return `<header>
@@ -112,7 +114,7 @@ function header(ctx) {
     <button class="schbtn" id="sb" aria-label="search"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="10.5" cy="10.5" r="7"/><path d="M16 16 L22 22"/></svg></button>
     <div class="schwrap" id="sw"><div class="schin"><input id="si" placeholder="SEARCH TEAMS, PLAYERS, LEAGUES…" autocomplete="off"></div><div class="schres" id="sr"></div></div>
   </div>
-  <nav class="qn" id="qn">${nav}</nav>
+  <nav class="qn ${k ? 'qnt' : 'qng'}" id="qn">${nav}</nav>
   <div class="tdd" id="tdd">${dd}</div>
 </header>`;
 }
