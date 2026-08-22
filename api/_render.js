@@ -340,7 +340,7 @@ function pgArticle(id){
   });
  }else{flow=(a.body||[]).map(para).join('')}
  const srcs=a.sources&&a.sources.length
-  ?`<div class="srcs"><div class="t">SOURCES — EVERY CLAIM CITED</div>${a.sources.map(s=>`<a href="${s.url}" target="_blank" rel="noopener">↗ ${s.name}</a>`).join('')}</div>`
+  ?`<div class="srcs"><div class="t">SOURCES</div>${a.sources.map(s=>`<a href="${s.url}" target="_blank" rel="noopener">↗ ${s.name}</a>`).join('')}</div>`
   :(a.src?`<div class="src">${a.src}</div>`:'');
  const hero = a.ph && a.ph.link
   ? `<a href="${a.ph.link}" target="_blank" rel="noopener" title="View the original post">${cov(a,true,true)}</a>`
