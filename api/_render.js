@@ -283,11 +283,29 @@ function railItem(a){
   <span class="rlg">${inner}</span>
   <span><span class="h">${noEmoji(a.h)}</span></span></a>`;
 }
+// A hub's standfirst is an identity line, not a news line. `sub` in _data.js packs the
+// division together with a rotating what's-hot blurb — "DIVISION I · FIRST SERVE OPENS AUG 21
+// · FISERV FORUM" — and a blurb baked into static data cannot age. On 22 Aug the NCAA women's
+// hub was still announcing a first serve that had already happened the day before, above a
+// page full of that tournament's results.
+// So the hub says what the league IS: its name, and its division or its full name where the
+// name is initials. What is hot lives in the stories underneath, which is the one place on
+// the page that keeps itself current.
+const DIV = {
+  ncaaw:   'DIVISION I',
+  ncaam:   'NATIONAL COLLEGIATE',   // men's has one championship across D-I and D-II
+  lovb:    'LEAGUE ONE VOLLEYBALL',
+  mlv:     'MAJOR LEAGUE VOLLEYBALL',
+  beach:   'ASSOCIATION OF VOLLEYBALL PROFESSIONALS',
+  intl:    'VOLLEYBALL NATIONS LEAGUE',
+  recruit: ''                        // no division and no initials to expand
+};
+
 function pgHub(k,tab){
  const L=LEAGUES[k];if(!L)return pg404();
  const arts=ARTICLES.filter(a=>a.lg===k);
  let body='';
- const kick=`<span class="kick"><b style="color:var(--red)">●</b> ${L.n.toUpperCase()} · ${L.sub}</span>`;
+ const kick=`<span class="kick"><b style="color:var(--red)">●</b> ${L.n.toUpperCase()}${DIV[k]?` · ${DIV[k]}`:''}</span>`;
  if(!tab){
   body=arts.length>2?`<div style="margin-top:18px" class="secmod">${acard(arts[0],'lead')}<div class="stack">${arts.slice(1,3).map(a=>acard(a,'sm')).join('')}</div></div>${arts.length>3?`<div class="grid3" style="margin-top:20px">${arts.slice(3).map(a=>acard(a,'sm')).join('')}</div>`:''}`
    :arts.length?`<div class="grid2" style="margin-top:18px">${arts.map(a=>acard(a)).join('')}</div>`
@@ -413,7 +431,7 @@ function pg404(){return `<div style="text-align:center;padding:60px 0"><div clas
 
 module.exports = {
   setCtx, art, toMatch, normDay, ageLabel, tlogo, tlg, die, STAR, FP, VFLAG,
-  cov, photoCov, acard, railItem, mcard, tickerHTML, tickerOrder, noEmoji, personName, nlStrip, embedsHTML,
+  cov, photoCov, acard, railItem, mcard, tickerHTML, tickerOrder, noEmoji, personName, DIV, nlStrip, embedsHTML,
   optImg, imgHostOK, IMG_HOSTS,
   pgHome, pgHub, pgScores, pgTeam, pgArticle, pgNews, pgAbout, pg404
 };
