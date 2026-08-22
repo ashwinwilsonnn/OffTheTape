@@ -68,7 +68,10 @@ function toMatch(m) {
 }
 
 /* ================= COVERS ================= */
-function photoCov(a,lead){
+// mode: hero = the article's own cover. Only there do the credit and the meta bar ride on
+// the image. On a browse card the chip alone says what this is; everything else was repeating
+// the line printed directly underneath it.
+function photoCov(a,lead,hero){
  const t=a.t1?TEAMS[a.t1]:null;const c=t?t.c1:(a.lgc||'#141414');
  // Width descriptors, not DPR. The old 1x/2x srcset meant a 390px phone still pulled the
  // 1200px lead image; now the browser picks off the box it will actually paint into.
@@ -87,11 +90,11 @@ function photoCov(a,lead){
   <img class="cvph" src="${opt}"${rs} alt=""${fb} width="${w2}" height="${Math.round(w2*9/16)}" decoding="async" ${lead?'fetchpriority="high"':'loading="lazy"'} onerror="${fb?IMGFB:die}">
   <div class="cvscrim"></div>
   <div class="chip">${a.chip}</div>
-  <div class="cvcred">${a.ph.cr}</div>
-  <div class="gdbar"><div class="m" style="font-size:9px">${a.m}</div></div></div>`;
+  ${hero?`<div class="cvcred">${a.ph.cr}</div>
+  <div class="gdbar"><div class="m" style="font-size:9px">${a.m}</div></div>`:''}</div>`;
 }
-function cov(a,lead){
- if(a.ph)return photoCov(a,lead);
+function cov(a,lead,hero){
+ if(a.ph)return photoCov(a,lead,hero);
  const F=a.fam;
  if(F==='07a'&&TEAMS[a.t1]&&TEAMS[a.t2]){const A=TEAMS[a.t1],B=TEAMS[a.t2];/* rule: t1 = AWAY on white · t2 = HOME on its own colors */
   const half=(T,x,home)=>`
@@ -144,7 +147,14 @@ function cov(a,lead){
   ${(()=>{const LG=LEAGUES[a.lg];const im=t?t.img:LG.img;const fb=t?t.s:LG.n[0];return im?`<div class="pl" style="left:auto;right:12px;top:auto;bottom:34px;transform:none;width:46px;height:46px;box-shadow:none"><img src="${im}" alt="" onerror="${die}"><span class="mg" style="font-size:13px">${fb}</span></div>`:''})()}
   <div class="mono" style="position:absolute;left:14px;bottom:12px;font-size:8px;letter-spacing:.13em;color:rgba(255,255,255,.75)">${a.m}</div></div>`
 }
-function acard(a,cls){return `<a class="acard ${cls||''}" href="/news/${a.id}">${cov(a,cls==='lead')}<div class="ttl">${a.h}</div><div class="mt"><b>${a.chip.split('·')[0].trim()}</b> · ${a.m}</div></a>`}
+// Metadata is tiered by depth, not stapled to every card. On the home page the only question
+// a card answers is "what is this" — the chip on the cover already says the category, so the
+// headline stands alone. In a section feed you are comparing many items, so freshness earns
+// its place and gets three characters. Author, date and photo credit wait for the article.
+function acard(a,cls,mode){
+ const mt = mode==='home' ? ''
+  : `<div class="mt"><b>${a.chip.split('·')[0].trim()}</b> · ${ageLabel(a.published_at||a.created_at)}</div>`;
+ return `<a class="acard ${cls||''}" href="/news/${a.id}">${cov(a,cls==='lead')}<div class="ttl">${a.h}</div>${mt}</a>`}
 
 /* ================= TICKER (v5: day left · league+logo right · drag both platforms) ================= */
 function tickerHTML(MATCHES){
@@ -187,12 +197,12 @@ function pgHome() {
   const most = take(ARTICLES, 8);
   const sec = (ttl, href, label) => `<div class="sect">${ttl} <a class="mr" href="${href}">${label}</a></div>`;
   let h = `<span class="kick"><b style="color:var(--red)">●</b> THE HOME OF EVERYTHING VOLLEYBALL</span>
- <div class="cols"><div>${acard(lead, 'lead')}</div><aside>
+ <div class="cols"><div>${acard(lead, 'lead', 'home')}</div><aside>
   <div class="sect" style="font-size:15px">TOP HEADLINES</div><div class="rail">${rail.map(railItem).join('')}</div>
  </aside></div>`;
   if (most.length) h += `
  <div class="sect">MOST READ 📈 <span class="arrows"><button onclick="mrScroll(-560)" aria-label="back">‹</button><button onclick="mrScroll(560)" aria-label="forward">›</button></span></div>
- <div class="hrow" id="mr">${most.map(a => acard(a, 'sm')).join('')}</div>`;
+ <div class="hrow" id="mr">${most.map(a => acard(a, 'sm', 'home')).join('')}</div>`;
   const block = (list, ttl, href, label, rev) => {
     if (!list.length) return '';
     const pick = list.filter(a => !used.has(a.id));
@@ -201,29 +211,29 @@ function pgHome() {
     src.slice(0, 3).forEach(a => used.add(a.id));
     const head = sec(ttl, href, label);
     if (src.length > 2) return head + (rev
-      ? `<div class="secmod rev"><div class="stack">${src.slice(1, 3).map(a => acard(a, 'sm')).join('')}</div>${acard(src[0])}</div>`
-      : `<div class="secmod">${acard(src[0])}<div class="stack">${src.slice(1, 3).map(a => acard(a, 'sm')).join('')}</div></div>`);
-    return head + `<div class="grid2">${src.slice(0, 2).map(a => acard(a)).join('')}</div>`;
+      ? `<div class="secmod rev"><div class="stack">${src.slice(1, 3).map(a => acard(a, 'sm', 'home')).join('')}</div>${acard(src[0], '', 'home')}</div>`
+      : `<div class="secmod">${acard(src[0], '', 'home')}<div class="stack">${src.slice(1, 3).map(a => acard(a, 'sm', 'home')).join('')}</div></div>`);
+    return head + `<div class="grid2">${src.slice(0, 2).map(a => acard(a, '', 'home')).join('')}</div>`;
   };
   h += block(by('ncaaw'), 'NCAA WOMEN', '/hub/ncaaw', 'ALL NCAA W ›', false);
   // the rhythm alternates on purpose — big card left, then big card right
   h += block(by('lovb').concat(by('mlv')), 'PRO VOLLEYBALL', '/hub/lovb', 'ALL PRO ›', true);
   const ncaam = by('ncaam');
-  if (ncaam.length) { ncaam.slice(0, 2).forEach(a => used.add(a.id)); h += sec('NCAA MEN', '/hub/ncaam', 'ALL NCAA M ›') + `<div class="grid2">${ncaam.slice(0, 2).map(a => acard(a)).join('')}</div>`; }
+  if (ncaam.length) { ncaam.slice(0, 2).forEach(a => used.add(a.id)); h += sec('NCAA MEN', '/hub/ncaam', 'ALL NCAA M ›') + `<div class="grid2">${ncaam.slice(0, 2).map(a => acard(a, '', 'home')).join('')}</div>`; }
   h += nlStrip();
   const bch = by('beach').concat(by('intl'));
   if (bch.length) {
     const fresh = bch.filter(a => !used.has(a.id));
     const row = (fresh.length >= 3 ? fresh : bch.filter(a => a.id !== lead.id)).slice(0, 3);
     row.forEach(a => used.add(a.id));
-    h += sec('BEACH + INTERNATIONAL', '/hub/beach', 'MORE ›') + `<div class="grid3">${row.map(a => acard(a, 'sm')).join('')}</div>`;
+    h += sec('BEACH + INTERNATIONAL', '/hub/beach', 'MORE ›') + `<div class="grid3">${row.map(a => acard(a, 'sm', 'home')).join('')}</div>`;
     const rest = bch.filter(a => !used.has(a.id));
-    if (rest.length > 2) { rest.slice(0, 3).forEach(a => used.add(a.id)); h += `<div class="secmod" style="margin-top:20px">${acard(rest[0])}<div class="stack">${rest.slice(1, 3).map(a => acard(a, 'sm')).join('')}</div></div>`; }
+    if (rest.length > 2) { rest.slice(0, 3).forEach(a => used.add(a.id)); h += `<div class="secmod" style="margin-top:20px">${acard(rest[0], '', 'home')}<div class="stack">${rest.slice(1, 3).map(a => acard(a, 'sm', 'home')).join('')}</div></div>`; }
   }
   const rec = by('recruit');
   if (rec.length) {
     const rr = rec.slice(1, 4).length ? rec.slice(1, 4) : ARTICLES.filter(a => a.id !== rec[0].id && a.id !== lead.id).slice(0, 3);
-    h += sec('RECRUITING', '/hub/recruit', 'ALL RECRUITING ›') + `<div class="reclay"><div class="rail">${rr.map(railItem).join('')}</div>${acard(rec[0])}</div>`;
+    h += sec('RECRUITING', '/hub/recruit', 'ALL RECRUITING ›') + `<div class="reclay"><div class="rail">${rr.map(railItem).join('')}</div>${acard(rec[0], '', 'home')}</div>`;
   }
   return h;
 }
@@ -234,7 +244,7 @@ function railItem(a){
   :(L.img?`<img src="${L.img}" alt="" onerror="${die}"><span class="mfb" style="background:#262626"></span>`:STAR);
  return `<a href="/news/${a.id}">
   <span class="rlg">${inner}</span>
-  <span><span class="h">${a.h}</span><span class="m" style="display:block">${a.chip.split('·')[0].trim()} · ${a.m}</span></span></a>`;
+  <span><span class="h">${a.h}</span><span class="m" style="display:block">${a.chip.split('·')[0].trim()}</span></span></a>`;
 }
 function pgHub(k,tab){
  const L=LEAGUES[k];if(!L)return pg404();
@@ -333,8 +343,8 @@ function pgArticle(id){
   ?`<div class="srcs"><div class="t">SOURCES — EVERY CLAIM CITED</div>${a.sources.map(s=>`<a href="${s.url}" target="_blank" rel="noopener">↗ ${s.name}</a>`).join('')}</div>`
   :(a.src?`<div class="src">${a.src}</div>`:'');
  const hero = a.ph && a.ph.link
-  ? `<a href="${a.ph.link}" target="_blank" rel="noopener" title="View the original post">${cov(a,true)}</a>`
-  : cov(a,true);
+  ? `<a href="${a.ph.link}" target="_blank" rel="noopener" title="View the original post">${cov(a,true,true)}</a>`
+  : cov(a,true,true);
  return `<div class="abody">${hero}
  <h1>${a.h}</h1>
  ${a.dek?`<p class="dek">${a.dek}</p>`:''}
