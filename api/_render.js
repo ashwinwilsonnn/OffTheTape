@@ -147,19 +147,43 @@ function cov(a,lead,hero){
   ${(()=>{const LG=LEAGUES[a.lg];const im=t?t.img:LG.img;const fb=t?t.s:LG.n[0];return im?`<div class="pl" style="left:auto;right:12px;top:auto;bottom:34px;transform:none;width:46px;height:46px;box-shadow:none"><img src="${im}" alt="" onerror="${die}"><span class="mg" style="font-size:13px">${fb}</span></div>`:''})()}
   <div class="mono" style="position:absolute;left:14px;bottom:12px;font-size:8px;letter-spacing:.13em;color:rgba(255,255,255,.75)">${a.m}</div></div>`
 }
+// Same rule _lib.js uses for <title>: a trailing pictograph, and only a trailing one, so an
+// emoji inside a headline is left alone. Declared locally because _lib.js requires this file.
+const noEmoji = s => String(s || '').replace(/\s*\p{Extended_Pictographic}️?\s*$/u, '');
+
 // Metadata is tiered by depth, not stapled to every card. On the home page the only question
 // a card answers is "what is this" — the chip on the cover already says the category, so the
 // headline stands alone. In a section feed you are comparing many items, so freshness earns
 // its place and gets three characters. Author, date and photo credit wait for the article.
 function acard(a,cls,mode){
+ const lead = cls==='lead';
  const mt = mode==='home' ? ''
   : `<div class="mt"><b>${a.chip.split('·')[0].trim()}</b> · ${ageLabel(a.published_at||a.created_at)}</div>`;
- return `<a class="acard ${cls||''}" href="/news/${a.id}">${cov(a,cls==='lead')}<div class="ttl">${a.h}</div>${mt}</a>`}
+ // A wire desk uses one emoji, on the story of the day. A column of them stops being emphasis
+ // and becomes wallpaper, so the lead keeps its own and everything below it goes clean.
+ return `<a class="acard ${cls||''}" href="/news/${a.id}">${cov(a,lead)}<div class="ttl">${lead?a.h:noEmoji(a.h)}</div>${mt}</a>`}
 
 /* ================= TICKER (v5: day left · league+logo right · drag both platforms) ================= */
+// A ticker is not the scores page. /scores reads oldest-first because you are browsing a week;
+// a ticker answers "what is on right now", so it leads with live, then today, then what is
+// coming, and only then last night's finals with the newest at the front. Three days of finals
+// is plenty — past that it is an archive strip nobody asked for, and it was the reason the
+// phone ticker opened on beach results from six days earlier.
+function tickerOrder(ms){
+ const today=normDay('TODAY').dk, tmw=normDay('TOMORROW').dk;
+ const rank=m=>m.live?0:m.dk===today?1:m.dk===tmw?2:(m.st==='FINAL'?4:3);
+ const midnight=ctNow().setHours(0,0,0,0);
+ const fresh=m=>m.st!=='FINAL'||!m.sort||(midnight-m.sort)<=3*864e5;
+ return ms.filter(fresh).sort((a,b)=>{
+  const ra=rank(a),rb=rank(b);
+  if(ra!==rb)return ra-rb;
+  return ra===4?(b.sort||0)-(a.sort||0)    // finals: newest first
+               :(a.sort||0)-(b.sort||0);   // everything else: soonest first
+ });
+}
 function tickerHTML(MATCHES){
  let h='';
- MATCHES.forEach(m=>{
+ tickerOrder(MATCHES).forEach(m=>{
   const A=m.a.t?TEAMS[m.a.t]:null,B=m.b.t?TEAMS[m.b.t]:null;
   const an=A?A.s:m.a.n,bn=B?B.s:m.b.n;
   const L=LEAGUES[m.lgk];
@@ -183,7 +207,7 @@ function nlStrip() {
 function pgHome() {
   const by = lg => ARTICLES.filter(a => a.lg === lg);
   const lead = ARTICLES[0];
-  if (!lead) return `<span class="kick"><b style="color:var(--red)">●</b> THE HOME OF EVERYTHING VOLLEYBALL</span><p style="color:var(--ink2);margin-top:24px">First stories publish shortly.</p>`;
+  if (!lead) return `<span class="kick kickhome"><b style="color:var(--red)">●</b> THE HOME OF EVERYTHING VOLLEYBALL</span><p style="color:var(--ink2);margin-top:24px">First stories publish shortly.</p>`;
   // A story shouldn't greet the reader twice in one screen. Sections prefer stories that
   // haven't run higher up the page, and only reuse one if the section would be empty.
   const used = new Set([lead.id]);
@@ -196,7 +220,7 @@ function pgHome() {
   const rail = take(ARTICLES, 6);
   const most = take(ARTICLES, 8);
   const sec = (ttl, href, label) => `<div class="sect">${ttl} <a class="mr" href="${href}">${label}</a></div>`;
-  let h = `<span class="kick"><b style="color:var(--red)">●</b> THE HOME OF EVERYTHING VOLLEYBALL</span>
+  let h = `<span class="kick kickhome"><b style="color:var(--red)">●</b> THE HOME OF EVERYTHING VOLLEYBALL</span>
  <div class="cols"><div>${acard(lead, 'lead', 'home')}</div><aside>
   <div class="sect" style="font-size:15px">TOP HEADLINES</div><div class="rail">${rail.map(railItem).join('')}</div>
  </aside></div>`;
@@ -242,9 +266,11 @@ function railItem(a){
  const t=a.t1?TEAMS[a.t1]:null;const L=LEAGUES[a.lg];
  const inner=t?`<img src="${t.img}" alt="" onerror="${die}"><span class="mfb" style="background:${t.c1}"></span>`
   :(L.img?`<img src="${L.img}" alt="" onerror="${die}"><span class="mfb" style="background:#262626"></span>`:STAR);
+ // The league badge is already sitting against the headline. Printing the league name under
+ // it as well gave a page of NCAA women's stories a column reading NCAA WOMEN three times.
  return `<a href="/news/${a.id}">
   <span class="rlg">${inner}</span>
-  <span><span class="h">${a.h}</span><span class="m" style="display:block">${a.chip.split('·')[0].trim()}</span></span></a>`;
+  <span><span class="h">${noEmoji(a.h)}</span></span></a>`;
 }
 function pgHub(k,tab){
  const L=LEAGUES[k];if(!L)return pg404();
@@ -376,7 +402,7 @@ function pg404(){return `<div style="text-align:center;padding:60px 0"><div clas
 
 module.exports = {
   setCtx, art, toMatch, normDay, ageLabel, tlogo, tlg, die, STAR, FP, VFLAG,
-  cov, photoCov, acard, railItem, mcard, tickerHTML, nlStrip, embedsHTML,
+  cov, photoCov, acard, railItem, mcard, tickerHTML, tickerOrder, noEmoji, nlStrip, embedsHTML,
   optImg, imgHostOK, IMG_HOSTS,
   pgHome, pgHub, pgScores, pgTeam, pgArticle, pgNews, pgAbout, pg404
 };
