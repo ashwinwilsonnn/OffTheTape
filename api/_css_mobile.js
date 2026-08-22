@@ -89,4 +89,20 @@ module.exports = `
   .qng{display:none}
   .kickhome{display:none}
 }
+
+/* ---- covers: actually round the photo ----
+   .cv carries border-radius:10px but never had overflow:hidden, and .cvph has no radius of
+   its own — so every photographed card has been drawing square photo corners through a
+   rounded frame. It also clips the decorative SVG in the fallback cover, which was drawing a
+   line 18px past its own box. */
+.cv{overflow:hidden}
+
+/* ---- tables on a touch screen ----
+   The AVCA poll is 25 rows of team links and each anchor was about 22px tall — a quarter of
+   an inch. The cell had the padding; the link, which is the thing you actually hit, did not. */
+@media(max-width:820px){
+  .tb td{padding:6px 10px}
+  .tb .tmc{padding:9px 0}
+  .tb .rk{font-variant-numeric:tabular-nums}
+}
 `;

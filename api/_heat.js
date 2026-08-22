@@ -32,6 +32,20 @@ const SHELF = [
 const DEFAULT_SHELF = 36;
 const RANK_WORTH = 0.35;   // rank 100 ≈ one day of freshness
 
+// A standing editorial preference, not a news judgement. The audience is American, so NCAA
+// women is the spine of the site and gets a thumb on the scale for free. It is deliberately
+// small: a rank of about 35 anywhere else clears it, so a genuinely bigger story from Turkey
+// or the VNL still leads. This is a tiebreaker between comparable stories, never a ceiling.
+const LEAGUE_WEIGHT = {
+  ncaaw:   0.12,   // the core of the audience
+  lovb:    0.05,   // US pro women
+  recruit: 0.04,   // US, and it feeds ncaaw
+  mlv:     0.04,   // US pro men
+  ncaam:   0.03,
+  beach:   0.03,   // AVP is American but niche
+  intl:    0,      // baseline — has to earn the lead on rank
+};
+
 function shelfFor(chip) {
   const s = String(chip || '').toUpperCase();
   // Chips read "LEAGUE · KIND". The league half is never the story type, so drop it.
@@ -53,10 +67,11 @@ function heat(a) {
   if (spent >= 1) return -spent;
   // Alive: newest first. 1.0 at publish, 0.5 at a day old, 0.25 at three days.
   const rank = Math.max(0, Math.min(Number(a.rank) || 0, 100)) / 100;
-  return 1 / (1 + age / 24) + RANK_WORTH * rank;
+  const league = LEAGUE_WEIGHT[a.lg || a.league] || 0;
+  return 1 / (1 + age / 24) + RANK_WORTH * rank + league;
 }
 
 // Ties fall back to recency, which is the whole point.
 const byHeat = (a, b) => (heat(b) - heat(a)) || (ageHours(a) - ageHours(b));
 
-module.exports = { SHELF, DEFAULT_SHELF, RANK_WORTH, shelfFor, heat, byHeat, ageHours };
+module.exports = { SHELF, DEFAULT_SHELF, RANK_WORTH, LEAGUE_WEIGHT, shelfFor, heat, byHeat, ageHours };
