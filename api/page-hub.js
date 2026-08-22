@@ -11,7 +11,8 @@ module.exports = async (req, res) => {
     const label = tab ? `${LG.n} ${tab}` : LG.n;
     L.ok(res, L.page({
       title: `${label} — OFF THE TAPE`,
-      desc: `${LG.n} volleyball on Off The Tape — ${String(LG.sub || '').toLowerCase()}`,
+      // LG.sub carries a what's-hot blurb that goes stale; the division does not.
+      desc: `${LG.n} volleyball on Off The Tape${L.R.DIV[lg] ? ` — ${L.R.DIV[lg].toLowerCase()}` : ''}. Scores, news, rankings and recruiting.`,
       canonical: `${L.SITE}/hub/${lg}${tab ? '/' + tab : ''}`,
       ctx: { kind: 'hub', lg, tab }, matches, arts,
       body: L.R.pgHub(lg, tab)
