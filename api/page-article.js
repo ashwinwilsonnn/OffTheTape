@@ -35,7 +35,9 @@ module.exports = async (req, res) => {
             title: `${L.stripEmoji(draft.hRaw)} — DRAFT PREVIEW`,
             desc: '', canonical: `${L.SITE}/news/${draft.id}`,
             ogImage: null, jsonld: null, noindex: true, extraHead: DRAFTCSS,
-            ctx: { kind: 'article', lg: draft.lg }, matches, arts,
+            // Scores are for browsing. In reading context the strip is chrome the story
+            // does not need — and ~70px of a phone screen it should not be paying for.
+            ctx: { kind: 'article', lg: draft.lg }, matches: null, arts,
             body: DRAFTBAR(draft, draft.status) + L.R.pgArticle(draft.id)
           }), 0);
         }
@@ -60,7 +62,7 @@ module.exports = async (req, res) => {
         mainEntityOfPage: `${L.SITE}/news/${a.id}`,
         ...(a.ph ? { image: [a.ph.src] } : {})
       },
-      ctx: { kind: 'article', lg: a.lg }, matches, arts,
+      ctx: { kind: 'article', lg: a.lg }, matches: null, arts,
       body: L.R.pgArticle(a.id)
     }), 120);
   } catch (e) { L.fail(res, e); }
