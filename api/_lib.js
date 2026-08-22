@@ -94,10 +94,13 @@ function tabsFor(k) {
     : [['', 'HOME'], ['scores', 'SCORES'], ['rankings', 'RANKINGS'], ['portal', String(L.portal || 'Portal').toUpperCase()]];
 }
 // The nav switches context server-side: league bar on hub and team pages, site bar elsewhere.
-// Those two are not the same object wearing different labels. The site bar (.qng) is the
-// hamburger panel's own first level printed a second time, so a phone can drop it without
-// losing anything; the league bar (.qnt) is how you move between a league's tabs, and dropping
-// it would strand the reader. The stylesheet needs to tell them apart.
+//
+// .qnt vs .qng marks which of those a phone may drop. Only ONE case is real navigation: on a
+// hub the bar is the tab strip — Scores, Rankings, Teams — and losing it strands the reader.
+// Everywhere else it is decoration. On the home page it is the hamburger panel's own first
+// level printed twice; on an article or team page it is a league's tab strip offered to
+// someone who is not browsing that league, which is the same duplication wearing a different
+// label. Article pages were carrying 40px of it above every story.
 function header(ctx) {
   ctx = ctx || {};
   const k = ctx.lg && LEAGUES[ctx.lg] ? ctx.lg : null;
@@ -118,7 +121,7 @@ function header(ctx) {
     <button class="schbtn" id="sb" aria-label="search"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><circle cx="10.5" cy="10.5" r="7"/><path d="M16 16 L22 22"/></svg></button>
     <div class="schwrap" id="sw"><div class="schin"><input id="si" placeholder="SEARCH TEAMS, PLAYERS, LEAGUES…" autocomplete="off"></div><div class="schres" id="sr"></div></div>
   </div>
-  <nav class="qn ${k ? 'qnt' : 'qng'}" id="qn">${nav}</nav>
+  <nav class="qn ${k && ctx.kind === 'hub' ? 'qnt' : 'qng'}" id="qn">${nav}</nav>
   <div class="tdd" id="tdd">${dd}</div>
 </header>`;
 }
