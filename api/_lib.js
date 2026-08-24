@@ -31,6 +31,31 @@ async function supaWrite(path, method, body) {
 
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const attr = s => esc(s).replace(/'/g, '&#39;');
+
+// A URL that is safe to put in href/src. esc() cannot help here: it leaves `javascript:` and
+// `data:` completely intact, so an attacker-supplied source link or photo URL became script the
+// moment a reader clicked it. Only http(s) and same-site paths survive; everything else becomes
+// empty, which renders as a dead link rather than a live one.
+// Every value that reaches an href, src, cite or data-*-permalink goes through this.
+const safeUrl = u => {
+  const v = String(u ?? '').trim();
+  if (!v) return '';
+  if (/^(https?:)?\/\//i.test(v)) return v;                 // absolute, or protocol-relative
+  if (/^\/(?!\/)/.test(v) || /^[.#?]/.test(v)) return v;      // same-site path, hash or query
+  return '';                                                 // javascript:, data:, vbscript:, mailto:…
+};
+
+// A colour that is safe to drop into a style attribute. Covers CSS injection through lgc/team
+// colours, which land inside `background:linear-gradient(...)`.
+const safeColor = c => /^#[0-9a-f]{3,8}$|^(rgb|hsl)a?\([\d\s.,%/]+\)$|^[a-z]{3,20}$/i.test(String(c ?? '').trim())
+  ? String(c).trim() : '';
+
+// JSON destined for an inline <script>. JSON.stringify does not escape `/` or `<`, so a headline
+// containing `</script>` closed the tag and everything after it became markup. This is on every
+// page (the search index) and on every article (the JSON-LD block).
+const jsonForScript = v => JSON.stringify(v)
+  .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
+  .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 const stripEmoji = s => String(s || '').replace(/\s*\p{Extended_Pictographic}️?\s*$/u, '');
 const die = "this.classList.add('dead')";
 
@@ -39,23 +64,52 @@ const die = "this.classList.add('dead')";
 // The unescaped headline survives as .hRaw for <title>, meta tags and JSON-LD.
 const HEAT = require('./_heat.js');
 
+// EVERY string from the database that reaches HTML is escaped HERE, once, at the boundary.
+// Renderers never re-escape and never see raw database text.
+//
+// This used to cover only h/dek/chip/meta/src, which meant body paragraphs, section headings,
+// source names and links, photo URLs and embeds all reached the page raw. Since the desks
+// assemble articles out of pages they fetch from the open web, a hostile source page was a
+// path to script execution on our own origin — and the editor could not have caught it,
+// because the desk card escapes body text and the live renderer did not. What the reviewer
+// read as text, the reader would have run.
+//
+// The *Raw fields are the unescaped originals, for <title>, meta tags, JSON-LD and the
+// editor's textareas — anywhere that needs the real characters rather than the display form.
+function escArticle(a) {
+  const E = x => esc(x ?? '');
+  const arr = x => Array.isArray(x) ? x : [];
+  const bodyRaw = typeof a.body === 'string' ? JSON.parse(a.body) : a.body;
+  const srcRaw = arr(a.sources);
+  return {
+    ...a,
+    hRaw: a.h || '', dekRaw: a.dek || '', chipRaw: a.chip || '',
+    bodyRaw: bodyRaw || null, sectionsRaw: a.sections || null, sourcesRaw: srcRaw.length ? srcRaw : null,
+    h: esc(a.h), dek: a.dek ? esc(a.dek) : '', chip: esc(a.chip || ''), m: esc(a.meta || ''),
+    src: a.src ? esc(a.src) : '',
+    body: arr(bodyRaw).map(E),
+    sections: a.sections ? arr(a.sections).map(x => ({ ...x, h2: x.h2 ? E(x.h2) : x.h2, paras: arr(x.paras).map(E) })) : null,
+    sources: srcRaw.length ? srcRaw.map(x => ({ ...x, name: E(x.name), url: safeUrl(x.url) })) : null,
+    pull: a.pull ? { ...a.pull, big: E(a.pull.big), label: E(a.pull.label) } : null,
+    embeds: arr(a.embeds).map(e => ({ ...e, url: safeUrl(e && e.url), context: e && e.context ? E(e.context) : (e && e.context) })),
+    num: a.num == null ? a.num : E(a.num),
+    sets: a.sets ? arr(a.sets).map(E) : a.sets,
+    ply: a.ply ? { ...a.ply, n: E(a.ply.n), l: E(a.ply.l), t: E(a.ply.t) } : null,
+    lgc: safeColor(a.lgc) || null,
+    photo_link: safeUrl(a.photo_link),
+    lg: a.league,
+    t1: a.t1 || null, t2: a.t2 || null,
+    ph: a.photo_url ? { src: safeUrl(a.photo_url), cr: esc(a.photo_credit || ''), link: safeUrl(a.photo_link) } : null
+  };
+}
+
 async function getArticles(status) {
   // Postgres hands back recency; _heat.js decides the running order. rank used to win
   // absolutely, which is how a GAMEDAY preview filed at rank 100 was still leading the site
   // 29 hours later, above the recaps of the matches it had previewed. Now rank is a thumb on
   // the scale that fades with the story instead of pinning it.
   const rows = await supaGet(`articles?select=*&status=eq.${status || 'published'}&order=published_at.desc.nullslast,created_at.desc`);
-  return rows.map(a => ({
-    ...a,
-    hRaw: a.h || '',
-    dekRaw: a.dek || '',
-    h: esc(a.h), dek: a.dek ? esc(a.dek) : '', chip: esc(a.chip || ''), m: esc(a.meta || ''),
-    src: a.src ? esc(a.src) : '',
-    body: typeof a.body === 'string' ? JSON.parse(a.body) : a.body,
-    lg: a.league,
-    t1: a.t1 || null, t2: a.t2 || null,
-    ph: a.photo_url ? { src: a.photo_url, cr: esc(a.photo_credit || ''), link: a.photo_link || null } : null
-  })).sort(HEAT.byHeat);
+  return rows.map(escArticle).sort(HEAT.byHeat);
 }
 // Team identity lives in one place now — see _teamkey.js for why. The board used to key a
 // match on `a_team || a_name`, which gave 'tamu' for a logo-linked copy and 'ta&m' for a
@@ -172,7 +226,7 @@ function footer() {
 }
 function searchIndex(arts) {
   return {
-    a: (arts || []).slice(0, 60).map(a => ({ i: a.id, h: a.hRaw, c: (a.chip || '').replace(/&amp;/g, '&') })),
+    a: (arts || []).slice(0, 60).map(a => ({ i: a.id, h: a.hRaw, c: a.chipRaw || '' })),
     t: Object.keys(TEAMS).map(id => ({ i: id, n: TEAMS[id].n, l: (LEAGUES[TEAMS[id].lg] || {}).n || '' }))
   };
 }
@@ -195,7 +249,7 @@ ${ogImage ? `<meta property="og:image" content="${attr(ogImage)}"><meta name="tw
 <meta property="og:url" content="${attr(canonical || SITE)}">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto+Slab:wght@900&family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
-${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld)}</script>` : ''}
+${jsonld ? `<script type="application/ld+json">${jsonForScript(jsonld)}</script>` : ''}
 ${extraHead}<style>${CSS}${CSSM}</style></head><body>
 ${header(ctx)}
 ${tick}
@@ -203,7 +257,7 @@ ${panel()}
 <main id="main">${body}</main>
 ${nlPopup()}
 ${footer()}
-<script>window.OTT={idx:${JSON.stringify(searchIndex(arts))}};</script>
+<script>window.OTT={idx:${jsonForScript(searchIndex(arts))}};</script>
 <script>${UI}${extraJs}</script>
 </body></html>`;
 }
@@ -226,7 +280,7 @@ function fail(res, e) {
   res.status(500).send(`<!doctype html><meta charset="utf-8"><title>OFF THE TAPE</title><body style="background:#171614;color:#E7E2D8;font-family:system-ui;padding:40px"><h1 style="color:#FF1F3D">OFF THE TAPE</h1><p>Something broke on our side — try again in a minute.</p></body>`);
 }
 
-module.exports = {
+module.exports = { safeUrl, safeColor, jsonForScript, escArticle,
   DATA, LEAGUES, TEAMS, CONF, CONFORDER, VNL, POLLW, POLLM, STAND_LOVB, STAND_MLV, VNLW, VNLM, CLASSBOARD, COMMITWIRE,
   R, HEAT, supaGet, supaWrite, esc, attr, stripEmoji, die, getArticles, getMatches,
   header, panel, footer, nlPopup, page, ok, fail, SITE, LAUNCHED
