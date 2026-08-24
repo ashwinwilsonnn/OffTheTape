@@ -222,12 +222,27 @@ function lcsDiff(a, b) {
   return out;
 }
 
-const fieldRow = (label, was, now) => was === now ? '' : `<tr><td style="font-weight:700;white-space:nowrap">${label}</td><td class="fpv">${L.esc(was || '—')}</td><td style="color:#9fdd8e">${L.esc(now || '—')}</td></tr>`;
+// A field the rewrite does not mention is a field it does not touch, and the review has to say
+// so. This used to render an absent key as “→ —”, which reads as “this will be wiped” — so a
+// rewrite that only reworked the body appeared to be deleting the headline, the chip and every
+// source. applyPending never did that (it guards on !== undefined), but nobody could tell that
+// from the page, and a review you cannot trust is worse than no review.
+//   undefined → untouched, listed separately, no row
+//   null or '' → a deliberate clear, shown as one
+const fieldRow = (label, was, now) => {
+  if (now === undefined) return '';
+  const w = was == null ? '' : String(was), n = now == null ? '' : String(now);
+  if (w === n) return '';
+  return `<tr><td style="font-weight:700;white-space:nowrap">${label}</td><td class="fpv">${L.esc(w || '—')}</td><td style="color:${n ? '#9fdd8e' : '#FFB4BE'}">${L.esc(n || '— CLEARED')}</td></tr>`;
+};
 
 function rewritePage(a, csrf) {
   const p = a.pending || {};
-  const rows = PENDING_FIELDS.filter(f => f !== 'sections' && f !== 'sources')
-    .map(f => fieldRow(f.toUpperCase(), f === 'h' ? a.hRaw : f === 'dek' ? a.dekRaw : a[f], p[f])).join('');
+  const cur = f => f === 'h' ? a.hRaw : f === 'dek' ? a.dekRaw : f === 'chip' ? a.chipRaw : a[f];
+  const scalars = PENDING_FIELDS.filter(f => f !== 'sections' && f !== 'sources');
+  const rows = scalars.map(f => fieldRow(f.toUpperCase(), cur(f), p[f])).join('');
+  // Everything the rewrite leaves alone, named out loud. Absence should be visible.
+  const untouched = PENDING_FIELDS.filter(f => p[f] === undefined).map(f => f.toUpperCase());
   const diff = p.sections ? lcsDiff(prose(a), prose({ sections: p.sections })) : [];
   const moved = diff.filter(d => d.t !== 'same').length;
   const line = d => {
@@ -239,14 +254,16 @@ function rewritePage(a, csrf) {
         : 'color:var(--mut);border-left:2px solid var(--ln)';
     return `<p style="${style};padding:2px 0 2px 10px;margin:7px 0;font-size:13.5px;line-height:1.6${heading ? ';font-weight:900;text-transform:uppercase;font-size:12px;letter-spacing:.04em' : ''}"><span style="font-family:'JetBrains Mono',monospace;opacity:.6">${mark}</span> ${txt}</p>`;
   };
+  const srcTouched = p.sources !== undefined;
   const srcWas = (a.sources || []).map(x => x.name).join(', ');
   const srcNow = (p.sources || []).map(x => x.name).join(', ');
   return `<div class="sect" style="font-size:15px">REWRITE STAGED <span class="mr">${L.esc(a.id)} · ${L.esc(String(a.status || '').toUpperCase())}</span></div>
 ${p.why ? `<div class="notice">${L.esc(p.why)}${p.by ? ` — ${L.esc(p.by)}` : ''}</div>` : ''}
 <div class="card" style="padding:16px">
-${rows || (p.sections ? '' : '<p style="color:var(--mut)">Nothing outside the body changed.</p>')}
+${rows || (p.sections ? '<p style="color:var(--mut);font-size:12px;margin:0">Nothing outside the body changes.</p>' : '<p style="color:var(--mut)">Nothing outside the body changed.</p>')}
 ${rows ? `<div class="tbwrap"><table class="tb"><tr><th>FIELD</th><th>NOW ON THE SITE</th><th>PROPOSED</th></tr>${rows}</table></div>` : ''}
-${srcWas !== srcNow ? `<p style="font-size:12px;color:var(--mut);margin-top:12px"><b style="color:var(--ink2)">SOURCES</b> ${L.esc(srcWas || 'none')} → <span style="color:#9fdd8e">${L.esc(srcNow || 'none')}</span></p>` : ''}
+${srcTouched && srcWas !== srcNow ? `<p style="font-size:12px;color:var(--mut);margin-top:12px"><b style="color:var(--ink2)">SOURCES</b> ${L.esc(srcWas || 'none')} → <span style="color:${srcNow ? '#9fdd8e' : '#FFB4BE'}">${L.esc(srcNow || 'none')}</span></p>` : ''}
+${untouched.length ? `<p style="font-size:11.5px;color:var(--mut);margin-top:12px">UNTOUCHED · <b style="color:var(--ink2)">${L.esc(untouched.join(' · '))}</b> — this rewrite does not mention ${untouched.length === 1 ? 'this field, so it stays' : 'these fields, so they stay'} exactly as ${untouched.length === 1 ? 'it is' : 'they are'}.</p>` : ''}
 ${p.sections ? `<div style="margin-top:14px"><div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:var(--mut);margin-bottom:8px">BODY · ${moved} PARAGRAPH${moved === 1 ? '' : 'S'} MOVED · STRUCK THROUGH IS WHAT GOES</div>${diff.map(line).join('')}</div>` : ''}
 <div class="drow" style="gap:10px;margin-top:18px;flex-wrap:wrap">
   <form method="POST" action="/approve" style="margin:0;display:flex;gap:10px"><input type="hidden" name="csrf" value="${L.attr(csrf)}"><input type="hidden" name="id" value="${L.attr(a.id)}">
@@ -261,8 +278,10 @@ ${p.sections ? `<div style="margin-top:14px"><div style="font-family:'JetBrains 
 
 const rewriteRow = a => {
   const p = a.pending || {};
-  const changed = [p.h && p.h !== a.hRaw ? 'headline' : '', p.dek && p.dek !== a.dekRaw ? 'dek' : '',
-  p.chip && p.chip !== a.chip ? 'chip' : '', p.sections ? 'body' : '', p.sources ? 'sources' : ''].filter(Boolean).join(' · ');
+  const moved = (was, now) => now !== undefined && String(now == null ? '' : now) !== String(was == null ? '' : was);
+  const changed = [moved(a.hRaw, p.h) ? 'headline' : '', moved(a.dekRaw, p.dek) ? 'dek' : '',
+  moved(a.chipRaw, p.chip) ? 'chip' : '', p.sections !== undefined ? 'body' : '',
+  p.sources !== undefined ? 'sources' : ''].filter(Boolean).join(' · ');
   return `<div class="card" style="padding:10px 16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
   <span style="flex:1;min-width:200px"><span style="font-weight:700;color:var(--w);font-size:13px">${a.h}</span>
   <span style="display:block;font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.1em;color:var(--mut);margin-top:3px">${L.esc(String(a.status || '').toUpperCase())} · ${L.esc(changed || 'no change detected')}</span></span>
@@ -358,7 +377,8 @@ module.exports = async (req, res) => {
 
       // Applying a staged rewrite. The whitelist is the point: a desk cannot smuggle
       // status or published_at through this column, so applying is always a text change and
-      // never a publish. An unpublished article stays unpublished.
+      // never a publish. An unpublished article stays unpublished. And a field the rewrite
+      // never mentions is left exactly as it is — which is what the review page now says too.
       if (id && action === 'applyrw') {
         const a = await S.anyById(id);
         const p = (a && a.pending) || null;
