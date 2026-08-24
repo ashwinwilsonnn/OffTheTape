@@ -40,6 +40,11 @@ const attr = s => esc(s).replace(/'/g, '&#39;');
 const safeUrl = u => {
   const v = String(u ?? '').trim();
   if (!v) return '';
+  // A URL carrying a quote, an angle bracket, a backtick or whitespace is trying to leave the
+  // attribute it is about to sit in — https://evil.test/a.jpg" onerror="alert(1) is a valid
+  // https URL right up until it is printed. A real URL percent-encodes all of these, so
+  // refusing them costs nothing and closes the whole class.
+  if (/["'`<>\s\\]/.test(v)) return '';
   if (/^(https?:)?\/\//i.test(v)) return v;                 // absolute, or protocol-relative
   if (/^\/(?!\/)/.test(v) || /^[.#?]/.test(v)) return v;      // same-site path, hash or query
   return '';                                                 // javascript:, data:, vbscript:, mailto:…
@@ -116,8 +121,23 @@ async function getArticles(status) {
 // text-only one, so the same fixture survived the dedupe twice.
 const TK = require('./_teamkey.js');
 
+// The ticker built from `matches` sits in the shell of EVERY page, and these rows are written
+// by the feed poller out of third-party JSON and CSV — one source is a community-maintained
+// release on GitHub. A hostile team name would have been sitewide script. Escaped here, before
+// the renderer sees the row; league_key and the team ids stay raw because they are lookup keys
+// that are never printed.
+const escMatch = m => ({
+  ...m,
+  day_label: esc(m.day_label ?? ''), status: esc(m.status ?? ''), league: esc(m.league ?? ''),
+  network: m.network == null ? m.network : esc(m.network),
+  a_name: esc(m.a_name ?? ''), b_name: esc(m.b_name ?? ''),
+  a_score: m.a_score == null ? m.a_score : esc(m.a_score),
+  b_score: m.b_score == null ? m.b_score : esc(m.b_score),
+  sets: Array.isArray(m.sets) ? m.sets.map(x => esc(x ?? '')) : (m.sets == null ? m.sets : esc(m.sets))
+});
+
 async function getMatches() {
-  const rows = await supaGet('matches?select=*&order=id.asc');
+  const rows = (await supaGet('matches?select=*&order=id.asc')).map(escMatch);
   // Same day + same two teams = one card. The row that knows the most wins:
   // a final score beats a scheduled time, logo-linked beats text-only, feed beats hand entry.
   const key = m => R.normDay(m.day_label).dk + '|' + [TK.teamKey(m.league_key, m.a_team, m.a_name), TK.teamKey(m.league_key, m.b_team, m.b_name)].sort().join('|');
@@ -280,7 +300,7 @@ function fail(res, e) {
   res.status(500).send(`<!doctype html><meta charset="utf-8"><title>OFF THE TAPE</title><body style="background:#171614;color:#E7E2D8;font-family:system-ui;padding:40px"><h1 style="color:#FF1F3D">OFF THE TAPE</h1><p>Something broke on our side — try again in a minute.</p></body>`);
 }
 
-module.exports = { safeUrl, safeColor, jsonForScript, escArticle,
+module.exports = { safeUrl, safeColor, jsonForScript, escArticle, escMatch,
   DATA, LEAGUES, TEAMS, CONF, CONFORDER, VNL, POLLW, POLLM, STAND_LOVB, STAND_MLV, VNLW, VNLM, CLASSBOARD, COMMITWIRE,
   R, HEAT, supaGet, supaWrite, esc, attr, stripEmoji, die, getArticles, getMatches,
   header, panel, footer, nlPopup, page, ok, fail, SITE, LAUNCHED
