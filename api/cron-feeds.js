@@ -1,7 +1,7 @@
 // GET /api/cron-feeds — the score pipeline for every league, in one function.
 // Each adapter is isolated: a failing feed reports its error and the others still write.
 // Writes rows tagged with `source` so feed data never clobbers hand-entered rows.
-// PREVIEW MODE (no writes) until SUPABASE_SERVICE_ROLE_KEY is set.
+// PREVIEW MODE (no writes) unless the caller is authorised AND SUPABASE_SERVICE_ROLE_KEY is set.
 const { supaGet, supaWrite, ok, fail } = require('./_supa.js');
 const DATA = require('./_data.js');
 
@@ -199,8 +199,29 @@ const FEEDS = [
   { key: 'mlv_volleydata', run: mlv }
 ];
 
+// This endpoint deletes and rewrites the entire `matches` table with the service-role key, and
+// it had no authentication of any kind — anyone who guessed the path could rewrite the board,
+// or simply hold it open and bill us for five upstream fetches a call. Vercel Cron sends
+// `Authorization: Bearer $CRON_SECRET`, so that is the check.
+//
+// Fail-safe: no CRON_SECRET set means no writes at all, only the preview report. A missing
+// secret must never mean "let everyone in".
+function authorised(req) {
+  const want = process.env.CRON_SECRET;
+  if (!want) return false;
+  const got = String((req.headers && (req.headers.authorization || req.headers.Authorization)) || '');
+  const a = Buffer.from(got), b = Buffer.from(`Bearer ${want}`);
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
 module.exports = async (req, res) => {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const allowed = authorised(req);
+  // The report is harmless; the writes are not. An unauthorised caller gets preview mode, and
+  // is told nothing about whether the service key exists.
+  const key = allowed ? process.env.SUPABASE_SERVICE_ROLE_KEY : null;
   const only = String((req.query && req.query.feed) || '');
   const report = {};
   try {
