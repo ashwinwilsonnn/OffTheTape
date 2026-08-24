@@ -4,7 +4,8 @@ const L = require('./_lib.js');
 
 module.exports = async (req, res) => {
   try {
-    const wantsPage = req.method !== 'POST' && !req.query.email;
+    // Any GET is the signup page now — ?email= no longer means anything on a GET.
+    const wantsPage = req.method !== 'POST';
     if (wantsPage) {
       const [arts, matches] = await Promise.all([L.getArticles('published'), L.getMatches()]);
       L.R.setCtx({ articles: arts, matches });
@@ -16,12 +17,13 @@ module.exports = async (req, res) => {
         body: L.R.pgNews()
       }), 300);
     }
-    let email = '';
-    if (req.method === 'POST') {
-      email = (req.body && req.body.email) || '';
-      if (!email && typeof req.body === 'string') { const m = req.body.match(/email=([^&]+)/); if (m) email = decodeURIComponent(m[1].replace(/\+/g, ' ')); }
-    } else email = String(req.query.email || '');
-    email = String(email).trim().toLowerCase();
+    // Signing up is a POST, and only a POST. It used to accept /api/subscribe?email=… on a GET,
+    // which meant `<img src="https://off-the-tape.com/api/subscribe?email=victim@x.com">` in any
+    // web page or email silently added that address to the list, from the victim's own browser,
+    // with no interaction. A GET must never write.
+    let email = (req.body && req.body.email) || '';
+    if (!email && typeof req.body === 'string') { const m = req.body.match(/email=([^&]+)/); if (m) email = decodeURIComponent(m[1].replace(/\+/g, ' ')); }
+    email = String(email).trim().toLowerCase().slice(0, 254);   // RFC 5321 caps an address at 254
     const valid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
     let msg, okk = false;
     if (!valid) msg = 'That email didn’t look right — try again.';

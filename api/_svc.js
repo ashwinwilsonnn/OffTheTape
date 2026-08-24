@@ -15,22 +15,13 @@ async function svcGet(path) {
 }
 
 // The same normalisation getArticles() does for public pages, so a draft previews exactly as
-// it will publish — same escaping, same cover shape, same photo contract.
-// hRaw/dekRaw/chipRaw are the unescaped originals: anything that COMPARES a stored value
-// against desk input has to use these, or an ampersand reads as a change forever.
-function normalise(rows) {
-  return rows.map(a => ({
-    ...a,
-    hRaw: a.h || '',
-    dekRaw: a.dek || '',
-    chipRaw: a.chip || '',
-    h: L.esc(a.h), dek: a.dek ? L.esc(a.dek) : '', chip: L.esc(a.chip || ''), m: L.esc(a.meta || ''),
-    src: a.src ? L.esc(a.src) : '',
-    body: typeof a.body === 'string' ? JSON.parse(a.body) : a.body,
-    lg: a.league, t1: a.t1 || null, t2: a.t2 || null,
-    ph: a.photo_url ? { src: a.photo_url, cr: L.esc(a.photo_credit || ''), link: a.photo_link || null } : null
-  }));
-}
+// it will publish — same escaping, same cover shape, same photo contract. It IS the same
+// function now: the draft preview at /news/<slug> renders through the public renderer, so if
+// this escaped less than getArticles() did, the editor's own preview would be the one page on
+// the site where injected script ran. escArticle() also exposes hRaw/dekRaw/chipRaw and
+// bodyRaw/sectionsRaw/sourcesRaw, which is what the editor's textareas and the rewrite diff
+// read — those need the real characters, not the display form.
+const normalise = rows => rows.map(L.escArticle);
 
 const safeId = id => String(id || '').replace(/[^a-zA-Z0-9_-]/g, '');
 
