@@ -31,18 +31,20 @@ function words(a) {
 function readAs(a) {
   // The article as it actually reads: dek, then the body, with the rest folded away.
   const paras = a.sections ? a.sections.flatMap(s => (s.h2 ? ['## ' + s.h2] : []).concat(s.paras || [])) : (a.body || []);
+  // Already escaped at the boundary (_lib.escArticle) — escaping again here would print the
+  // entities. The bold transform runs after, exactly as the live renderer does it.
   const fmt = p => /^## /.test(p)
-    ? `<h2 style="font-family:'Roboto Slab',serif;font-weight:900;font-size:15px;text-transform:uppercase;margin:16px 0 8px">${L.esc(p.slice(3))}</h2>`
-    : `<p>${L.esc(p).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}</p>`;
+    ? `<h2 style="font-family:'Roboto Slab',serif;font-weight:900;font-size:15px;text-transform:uppercase;margin:16px 0 8px">${p.slice(3)}</h2>`
+    : `<p>${p.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')}</p>`;
   const open = paras.slice(0, 2).map(fmt).join('');
   const rest = paras.slice(2).map(fmt).join('');
   return `<div class="abody" style="max-width:none;font-size:14px">${a.dek ? `<p class="dek" style="font-size:15px">${a.dek}</p>` : ''}${open}
   ${rest ? `<details style="margin-top:6px"><summary style="cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;color:var(--mut)">READ THE REST (${paras.length - 2} MORE)</summary><div style="margin-top:10px">${rest}</div></details>` : ''}</div>`;
 }
 function draftCard(a, csrf) {
-  const src = (a.sources || []).map(s => `<a href="${L.attr(s.url)}" target="_blank" rel="noopener noreferrer" style="display:block;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink2);padding:1px 0">↗ ${L.esc(s.name)}</a>`).join('');
+  const src = (a.sources || []).map(s => `<a href="${L.attr(s.url)}" target="_blank" rel="noopener noreferrer" style="display:block;font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--ink2);padding:1px 0">↗ ${s.name}</a>`).join('');
   const photo = a.ph
-    ? `PHOTO · ${L.esc(a.ph.cr || 'linked')}${a.ph.link ? ` · <a href="${L.attr(a.ph.link)}" target="_blank" rel="noopener noreferrer" style="color:var(--ink2);text-decoration:underline">see the post</a>` : ''}`
+    ? `PHOTO · ${a.ph.cr || 'linked'}${a.ph.link ? ` · <a href="${L.attr(a.ph.link)}" target="_blank" rel="noopener noreferrer" style="color:var(--ink2);text-decoration:underline">see the post</a>` : ''}`
     : `GRAPHIC COVER · FAMILY ${L.esc(a.fam || '01')}`;
   // Anything that would embarrass us in public gets called out before the publish button.
   const flags = [];
@@ -83,10 +85,14 @@ function draftCard(a, csrf) {
 // an array of {h2, paras}. Both flatten to the same plain text — a blank line between
 // paragraphs and "## " in front of a heading — which is the shape readAs() already renders
 // on the card above. So what you edit is exactly what you have been reading.
+// The textarea gets the REAL characters. Feeding it the escaped copy would show the editor
+// &amp; and &lt; and then save those entities straight back into the database.
 function bodyToText(a) {
-  const parts = a.sections
-    ? a.sections.flatMap(s => (s.h2 ? ['## ' + s.h2] : []).concat(s.paras || []))
-    : (a.body || []);
+  const secs = a.sectionsRaw !== undefined ? a.sectionsRaw : a.sections;
+  const flat = a.bodyRaw !== undefined ? a.bodyRaw : a.body;
+  const parts = secs
+    ? secs.flatMap(s => (s.h2 ? ['## ' + s.h2] : []).concat(s.paras || []))
+    : (flat || []);
   return parts.join('\n\n');
 }
 function textToBody(txt) {
@@ -101,7 +107,7 @@ function textToBody(txt) {
   // body stays populated as the flat fallback, so a renderer that ignores sections still works
   return { body: sections.flatMap(x => x.paras), sections };
 }
-const srcToText = a => (a.sources || []).map(x => `${x.name} | ${x.url}`).join('\n');
+const srcToText = a => ((a.sourcesRaw !== undefined ? a.sourcesRaw : a.sources) || []).map(x => `${x.name} | ${x.url}`).join('\n');
 function textToSrc(txt) {
   return String(txt || '').split('\n').map(x => x.trim()).filter(Boolean).map(line => {
     const i = line.lastIndexOf('|');
@@ -130,7 +136,7 @@ function editPage(a, csrf) {
   <div class="two">
     <div>
       <label>CHIP</label>
-      <input name="chip" value="${L.attr((a.chip || '').replace(/&amp;/g, '&'))}">
+      <input name="chip" value="${L.attr(a.chipRaw || '')}">
       <div class="hint">Reads <b>LEAGUE · KIND</b>. The KIND half sets how long this stays on the front page: GAMEDAY/PREVIEW 16h · RECAP/FINAL 30h · BREAKING/COMMIT/INJURY 48h · CHAMPIONSHIP 72h · RANKINGS 96h · ARGUMENT/ANALYSIS/PLAYER/LOOKAHEAD 110h. Anything else falls back to 36h. PREVIEW means tonight — for an event days away use LOOKAHEAD.</div>
     </div>
     <div>
@@ -198,9 +204,17 @@ const DESKCSS = `<style>
 
 const PENDING_FIELDS = ['h', 'dek', 'chip', 'sections', 'sources'];   // whitelist — see applyPending
 
-const prose = a => a && a.sections
-  ? a.sections.flatMap(s => (s.h2 ? ['## ' + s.h2] : []).concat(s.paras || []))
-  : ((a && a.body) || []);
+// RAW on both sides. The live article arrives escaped from the boundary and the staged copy
+// is raw JSON straight out of `pending`, so comparing the display forms would mark every
+// paragraph containing an apostrophe or an ampersand as rewritten.
+const prose = a => {
+  if (!a) return [];
+  const secs = a.sectionsRaw !== undefined ? a.sectionsRaw : a.sections;
+  const flat = a.bodyRaw !== undefined ? a.bodyRaw : a.body;
+  return secs
+    ? secs.flatMap(s => (s.h2 ? ['## ' + s.h2] : []).concat(s.paras || []))
+    : (flat || []);
+};
 
 // Paragraph-level LCS. Twelve rewrites is a lot to read twice each, so the review shows what
 // actually moved rather than two walls of text side by side.
@@ -255,7 +269,7 @@ function rewritePage(a, csrf) {
     return `<p style="${style};padding:2px 0 2px 10px;margin:7px 0;font-size:13.5px;line-height:1.6${heading ? ';font-weight:900;text-transform:uppercase;font-size:12px;letter-spacing:.04em' : ''}"><span style="font-family:'JetBrains Mono',monospace;opacity:.6">${mark}</span> ${txt}</p>`;
   };
   const srcTouched = p.sources !== undefined;
-  const srcWas = (a.sources || []).map(x => x.name).join(', ');
+  const srcWas = ((a.sourcesRaw !== undefined ? a.sourcesRaw : a.sources) || []).map(x => x.name).join(', ');
   const srcNow = (p.sources || []).map(x => x.name).join(', ');
   return `<div class="sect" style="font-size:15px">REWRITE STAGED <span class="mr">${L.esc(a.id)} · ${L.esc(String(a.status || '').toUpperCase())}</span></div>
 ${p.why ? `<div class="notice">${L.esc(p.why)}${p.by ? ` — ${L.esc(p.by)}` : ''}</div>` : ''}
@@ -295,11 +309,29 @@ const P = body => L.page({
   extraJs: "try{localStorage.setItem('ott_nl','1')}catch(e){};var _n=document.getElementById('nlov');if(_n)_n.remove();"
 });
 
-function loginPage(res, wrong) {
+// A short PIN with unlimited guesses is not a lock. Serverless instances are ephemeral so this
+// is not a hard limit — but it turns "spray it until it opens" into something slow enough to
+// notice and expensive enough to be worth doing elsewhere. Memory only; nothing is persisted.
+const TRIES = new Map();
+const who = req => String((req.headers && (req.headers['x-forwarded-for'] || req.headers['x-real-ip'])) || 'unknown').split(',')[0].trim();
+const WINDOW = 15 * 60e3, MAX = 8;
+function note(req) {
+  const k = who(req), now = Date.now();
+  const hits = (TRIES.get(k) || []).filter(t => now - t < WINDOW);
+  hits.push(now); TRIES.set(k, hits);
+  if (TRIES.size > 500) for (const [k2, v] of TRIES) if (!v.some(t => now - t < WINDOW)) TRIES.delete(k2);
+}
+const throttled = req => (TRIES.get(who(req)) || []).filter(t => Date.now() - t < WINDOW).length >= MAX;
+const clear = req => TRIES.delete(who(req));
+
+function loginPage(res, wrong, kind) {
+  const msg = kind === 'slow' ? 'Too many wrong PINs from this address. Wait fifteen minutes.'
+    : kind === 'legacy' ? 'Sign-in by link has been switched off — a PIN in a URL ends up in browser history and server logs. Type it here instead; this browser will then stay signed in for 30 days.'
+      : wrong ? 'Wrong PIN.' : '';
   return L.ok(res, P(shell(`<form method="POST" action="/approve" style="display:flex;gap:10px;margin-top:20px">
   <input type="password" name="pin" placeholder="PIN" autofocus autocomplete="current-password"><button type="submit">ENTER</button></form>
-  ${wrong ? '<div class="warnbox">Wrong PIN.</div>' : ''}
-  <p style="color:var(--mut);font-size:11.5px;margin-top:14px;max-width:52ch">Signing in sets a 30-day cookie on this browser. The PIN is never put in a link, so it can't leak through history, logs or referrers.</p>`)), 0);
+  ${msg ? `<div class="warnbox">${L.esc(msg)}</div>` : ''}
+  <p style="color:var(--mut);font-size:11.5px;margin-top:14px;max-width:52ch">Signing in sets a 30-day cookie on this browser. The PIN is never put in a link, so it can't leak through history, logs or referrers.</p>`)), 0, kind === 'slow' ? 429 : undefined);
 }
 function seeOther(res, to) { res.statusCode = 303; res.setHeader('Location', to); res.setHeader('Cache-Control', 'no-store'); return res.end ? res.end() : res.send(''); }
 
@@ -317,17 +349,17 @@ module.exports = async (req, res) => {
 
     // --- sign in -------------------------------------------------------------
     if (method === 'POST' && form.pin !== undefined) {
-      if (!A.pinOK(form.pin)) return loginPage(res, true);
+      if (throttled(req)) return loginPage(res, false, 'slow');
+      if (!A.pinOK(form.pin)) { note(req); return loginPage(res, true); }
+      clear(req);
       A.setSession(res);
       return seeOther(res, '/approve');
     }
-    // Legacy bookmark: /approve?pin=… still works once — it converts to a cookie and
-    // bounces to a clean URL so the secret stops travelling.
-    if (method === 'GET' && req.query && req.query.pin !== undefined) {
-      if (!A.pinOK(req.query.pin)) return loginPage(res, true);
-      A.setSession(res);
-      return seeOther(res, '/approve');
-    }
+    // The old /approve?pin=… bookmark is gone. It was kept as a convenience after the cookie
+    // landed, but it put the PIN in browser history, in Vercel's request log and in the Referer
+    // header sent to every publisher whose source link got clicked from the desk — which is the
+    // exact leak the cookie was introduced to close. A GET with a pin now just shows the form.
+    if (method === 'GET' && req.query && req.query.pin !== undefined) return loginPage(res, false, 'legacy');
     if (method === 'POST' && form.logout) { A.clearSession(res); return seeOther(res, '/approve'); }
 
     if (!A.isEditor(req)) return loginPage(res, false);
@@ -451,7 +483,7 @@ module.exports = async (req, res) => {
       const other = log.filter(r => !['change', 'held'].includes(r.kind));
       const when = t => t ? new Date(t).toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).toUpperCase() : '—';
       const tbl = (head, rows) => `<div class="tbwrap"><table class="tb"><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr>${rows}</table></div>`;
-      const link = (url, name) => `<a href="${L.attr(url)}" target="_blank" rel="noopener noreferrer" style="color:var(--ink2);text-decoration:underline">${L.esc(name || 'source')}</a>`;
+      const link = (url, name) => `<a href="${L.attr(L.safeUrl(url))}" target="_blank" rel="noopener noreferrer" style="color:var(--ink2);text-decoration:underline">${L.esc(name || 'source')}</a>`;
       const body = `${nav}
 ${held.length ? `<div class="warnbox"><b>${held.length} HELD FOR YOUR DECISION</b> — the desk would not write these on its own.</div>
 ${tbl(['WHAT', 'CURRENT', 'PROPOSED', 'WHY / SOURCE'], held.map(r => `<tr><td style="font-weight:700">${L.esc(r.entity || '')}</td><td class="fpv">${L.esc(r.before_val || '—')}</td><td class="fpv">${L.esc(r.after_val || '—')}</td><td class="fpv">${L.esc(r.summary || '')}${r.source_url ? ` · ${link(r.source_url, r.source_name)}` : ''}</td></tr>`).join(''))}` : ''}
@@ -468,7 +500,7 @@ ${tbl(['FEED', 'LAST OK', 'NOTE'], (feeds || []).map(f => `<tr><td style="font-w
 <div class="sect" style="font-size:15px">PLAYER STATS ON FILE <span class="mr">${(players || []).length} PLAYERS</span></div>
 ${(players || []).length ? tbl(['PLAYER', 'TEAM', 'LEAGUE', 'LINE'], players.map(p => `<tr><td style="font-weight:700">${L.esc(p.name || '')}</td><td class="fpv">${L.esc((L.TEAMS[p.team_id] || {}).n || p.team_id || '—')}</td><td class="fpv">${L.esc(p.league || '')}</td><td class="fpv">${L.esc(p.stat_line || '')}</td></tr>`).join('')) : '<p style="color:var(--mut);margin-top:10px">No player lines yet — the Data Desk builds this up run by run.</p>'}
 
-${other.length ? `<div class="sect" style="font-size:15px">NOTES FROM THE DESKS</div><div class="rail">${other.map(r => `<a href="${r.source_url ? L.attr(r.source_url) : '#'}" rel="noopener noreferrer"><span class="rlg"><span class="mfb" style="background:#312E2A;display:grid">${L.esc((r.kind || '?')[0].toUpperCase())}</span></span><span><span class="h">${L.esc(r.summary || r.entity || '')}</span><span class="m" style="display:block">${L.esc(r.desk || '')} · ${when(r.run_at)}</span></span></a>`).join('')}</div>` : ''}`;
+${other.length ? `<div class="sect" style="font-size:15px">NOTES FROM THE DESKS</div><div class="rail">${other.map(r => `<a href="${r.source_url ? L.attr(L.safeUrl(r.source_url)) : '#'}" rel="noopener noreferrer"><span class="rlg"><span class="mfb" style="background:#312E2A;display:grid">${L.esc((r.kind || '?')[0].toUpperCase())}</span></span><span><span class="h">${L.esc(r.summary || r.entity || '')}</span><span class="m" style="display:block">${L.esc(r.desk || '')} · ${when(r.run_at)}</span></span></a>`).join('')}</div>` : ''}`;
       return L.ok(res, P(shell(body)), 0);
     }
 
