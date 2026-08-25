@@ -11,6 +11,11 @@ const { IMG_HOSTS, imgHostOK, optImg, IMGFB } = require('./_img.js');
 
 const VFLAG = Object.fromEntries(VNL);
 const die = "this.classList.add('dead')";
+
+// _lib.js requires this file, so this cannot be imported from there without a require cycle.
+// Same definition, deliberately duplicated rather than dragged through a lazy require: it is
+// one line and it is load-bearing, because mkey and league names both end up inside attributes.
+const attr = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])).replace(/'/g, '&#39;');
 const STAR = '<svg viewBox="0 0 24 24" width="19" height="19"><path d="M12 1.8l3 6.6 7.2.8-5.4 4.9 1.5 7.1L12 17.6l-6.3 3.6 1.5-7.1-5.4-4.9 7.2-.8z" fill="#0A0A0A"/></svg>';
 
 // Per-request context. Set once at the top of every handler.
@@ -66,6 +71,36 @@ function toMatch(m) {
     b: { t: m.b_team, n: m.b_name, sc: sc(m.b_score), w: done ? !m.a_win : false }
   };
 }
+
+// Styles for the clickable board card and the match page. They live here rather than in
+// _css.js because only two surfaces use them and every reader pays for _css.js on every page.
+const MATCHCSS = `<style>
+.mcard.mlink{text-decoration:none;color:inherit;transition:border-color .15s,background .15s}
+.mcard.mlink:hover{border-color:var(--red);background:#1b1a17}
+.mbox{margin-top:2px;padding-top:8px;border-top:1px solid var(--ln);font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.14em;color:var(--mut);display:flex;justify-content:space-between;align-items:center}
+.mcard.mlink:hover .mbox{color:var(--red)}
+.mhero{border:1px solid var(--ln);background:var(--k1);border-radius:8px;overflow:hidden;margin-top:14px}
+.mhead{padding:16px 18px;border-bottom:1px solid var(--ln)}
+.mteam{display:flex;align-items:center;gap:12px;padding:12px 18px;font-family:'Roboto Slab',serif;font-weight:900;font-size:19px}
+.mteam.los{opacity:.55}
+.mteam .sc{margin-left:auto;font-size:30px;line-height:1}
+.mteam .wn{color:var(--red);font-size:11px;font-family:'JetBrains Mono',monospace;letter-spacing:.1em}
+.setgrid{display:grid;gap:1px;background:var(--ln);border-top:1px solid var(--ln);border-bottom:1px solid var(--ln)}
+.setgrid>div{background:var(--k1);padding:9px 6px;text-align:center}
+.setgrid .lbl{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.12em;color:var(--mut)}
+.setgrid .v{font-family:'Roboto Slab',serif;font-weight:900;font-size:17px;margin-top:3px}
+.setgrid .v.w{color:var(--red)}
+.bxsec{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.16em;color:var(--mut);margin:26px 0 8px}
+.bx{width:100%;border-collapse:collapse;font-size:12.5px}
+.bx th{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;color:var(--mut);text-align:right;padding:7px 8px;border-bottom:1px solid var(--ln);white-space:nowrap}
+.bx th:first-child,.bx td:first-child{text-align:left}
+.bx td{padding:8px;border-bottom:1px solid #201f1c;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.bx tr:last-child td{border-bottom:none}
+.bx .tot td{font-weight:800;background:#1b1a17;border-top:1px solid var(--ln)}
+.bx .nm{font-weight:700;color:var(--w)}
+.bx .po{color:var(--mut);font-size:10px;margin-left:5px}
+@media(max-width:600px){.bx{font-size:11.5px}.bx td,.bx th{padding:6px 5px}.mteam{font-size:16px}.mteam .sc{font-size:24px}}
+</style>`;
 
 /* ================= COVERS ================= */
 // mode: hero = the article's own cover. Only there do the credit and the meta bar ride on
@@ -192,6 +227,23 @@ function tickerOrder(ms){
                :(a.sort||0)-(b.sort||0);   // everything else: soonest first
  });
 }
+// The board's order, which is not the ticker's. The ticker is a glance and drops anything
+// older than three days; the board is where you go to LOOK UP a result, so it keeps a week of
+// finals — it just stops opening on them. Live first, then today, tomorrow, the rest of the
+// slate, and only then the finals, newest first.
+function boardOrder(ms){
+ const today=normDay('TODAY').dk, tmw=normDay('TOMORROW').dk;
+ const rank=m=>m.live?0:m.dk===today?1:m.dk===tmw?2:(m.st==='FINAL'?4:3);
+ const midnight=ctNow().setHours(0,0,0,0);
+ const keep=m=>m.st!=='FINAL'||!m.sort||(midnight-m.sort)<=7*864e5;
+ return ms.filter(keep).sort((a,b)=>{
+  const ra=rank(a),rb=rank(b);
+  if(ra!==rb)return ra-rb;
+  return ra===4?(b.sort||0)-(a.sort||0)     // finals: newest first
+               :(a.sort||0)-(b.sort||0);    // everything else: soonest first
+ });
+}
+
 function tickerHTML(MATCHES){
  let h='';
  tickerOrder(MATCHES).forEach(m=>{
@@ -200,7 +252,7 @@ function tickerHTML(MATCHES){
   const L=LEAGUES[m.lgk];
   const done=m.st==='FINAL';
   const dayl=m.live?'TODAY · <i class="lvd"></i>LIVE':(m.day+(done?' · FINAL':''));
-  h+=`<a class="tkc" href="/scores" draggable="false">
+  h+=`<a class="tkc" href="${m.box&&m.mkey?`/match/${attr(m.mkey)}`:'/scores'}" draggable="false">
    <span class="tl"><span class="tkdayl ${m.live?'live':''}">${dayl}</span><span class="tklead">${L&&L.img?`<img src="${L.img}" alt="" draggable="false" onerror="${die}">`:''}${m.lg}</span></span>
    <span class="tkbody"><span class="tkteams">
     <span class="rw ${done&&m.a.w?'win':done&&!m.a.w?'los':''}">${A?tlg(A):''}<span>${an}</span>${A&&A.rk?`<span class="rec">NO.${A.rk}</span>`:''}${done?`<span class="sc">${m.a.sc}</span>`:''}</span>
@@ -312,21 +364,21 @@ function pgHub(k,tab){
    :`<p style="color:var(--ink2);margin-top:20px">No stories in this hub yet — the desk fills it every morning.</p>`;
  }else if(tab==='scores'){
   const ms=MATCHES.filter(m=>m.lgk===k);
-  body=ms.length?`<div class="grid3" style="margin-top:18px">${ms.map(mcard).join('')}</div>`:`<p style="color:var(--ink2);margin-top:20px;font-size:14px">No ${L.n} matches on the board right now. The board fills from the live feed as the season opens.</p>`;
+  body=ms.length?`<div class="grid3" style="margin-top:18px">${boardOrder(ms).map(mcard).join('')}</div>`:`<p style="color:var(--ink2);margin-top:20px;font-size:14px">No ${L.n} matches on the board right now. The board fills from the live feed as the season opens.</p>`;
  }else if(tab==='rankings'){
-  if(k==='ncaaw'){body=`<div class="sect" style="font-size:15px;margin-top:20px">AVCA PRESEASON COACHES POLL · AUG 10 <span class="mr" style="color:#9fdd8e">REAL DATA · 63 BALLOTS</span></div><div class="tbwrap"><table class="tb"><tr><th>RK</th><th>TEAM</th><th>PTS</th><th>1ST-PLACE</th></tr>${POLLW.map(([r,id,fp,pts])=>{const t=TEAMS[id];return `<tr><td class="rk">${r}</td><td><a class="tmc" href="/team/${id}">${tlogo(t,22)}${t.n}</a></td><td class="fpv">${pts||'—'}</td><td class="fpv">${fp||'—'}</td></tr>`}).join('')}</table></div><p style="color:var(--mut);font-size:12px;margin-top:10px">Source: AVCA Division I Coaches Poll, Aug 10, 2026 — revealed with the NCAA. 63 first-place ballots (Nebraska 57, Kentucky 4, Texas 1, Texas A&M 1).</p>`}
-  else if(k==='ncaam'){body=`<div class="sect" style="font-size:15px;margin-top:20px">AVCA NATIONAL COLLEGIATE MEN — FINAL POLL · MAY 12, 2026 <span class="mr" style="color:#9fdd8e">OFFICIAL · REAL</span></div><div class="tbwrap"><table class="tb"><tr><th>RK</th><th>TEAM</th><th>PTS</th><th>RECORD</th><th>1ST</th></tr>${POLLM.map(([r,id,pts,rec,fp])=>{const t=TEAMS[id];return `<tr><td class="rk">${r}</td><td><a class="tmc" href="/team/${id}">${tlogo(t,22)}${t.n}</a></td><td class="fpv">${pts}</td><td class="fpv">${rec}</td><td class="fpv">${fp||'—'}</td></tr>`}).join('')}</table></div><p style="color:var(--mut);font-size:12px;margin-top:10px">Source: AVCA coaches poll (captured from avca.org). Hawaiʻi finished No. 1 with all 25 first-place votes after beating UC Irvine in the NCAA final.</p>`}
-  else if(k==='lovb'){body=`<div class="sect" style="font-size:15px;margin-top:20px">LOVB 2026 — FINAL <span class="mr" style="color:#9fdd8e">REAL · LOVB.COM</span></div><div class="tbwrap"><table class="tb"><tr><th>PL</th><th>TEAM</th><th>FINISH</th></tr>${STAND_LOVB.map(([id,fin],i)=>{const t=TEAMS[id];return `<tr><td class="rk">${i+1}</td><td><a class="tmc" href="/team/${id}">${tlogo(t,22)}${t.n}</a></td><td class="fpv">${fin}</td></tr>`}).join('')}</table></div><p style="color:var(--mut);font-size:12px;margin-top:10px">REAL: regular-season standings per lovb.com; Austin beat Salt Lake in the Championship golden set 15-8 (Apr 18, Long Beach). SF Signal + LA, Miami, Minnesota join for 2027.</p>`}
-  else if(k==='mlv'){body=`<div class="sect" style="font-size:15px;margin-top:20px">MLV 2026 — FINAL <span class="mr" style="color:#9fdd8e">REAL · FULL STANDINGS</span></div><div class="tbwrap"><table class="tb"><tr><th>PL</th><th>TEAM</th><th>FINISH</th></tr>${STAND_MLV.map(([id,fin],i)=>{const t=TEAMS[id];return `<tr><td class="rk">${i+1}</td><td><a class="tmc" href="/team/${id}">${tlogo(t,22)}${t.n}</a></td><td class="fpv">${fin}</td></tr>`}).join('')}</table></div>`}
-  else if(k==='intl'){const vt=(rows,ttl)=>`<div class="sect" style="font-size:15px;margin-top:20px">${ttl} <span class="mr" style="color:#9fdd8e">REAL</span></div><div class="tbwrap"><table class="tb"><tr><th>PL</th><th>TEAM</th><th>FINISH</th></tr>${rows.map(([n,fin],i)=>`<tr><td class="rk">${i+1}</td><td><span class="tmc">${VFLAG[n]?`<img src="${FP(VFLAG[n])}" alt="" style="width:24px;height:16px;object-fit:cover;border:1px solid #262626" onerror="${die}">`:''}<span class="mfb" style="width:22px;height:22px;font-size:8px;background:#262626">${n.slice(0,2).toUpperCase()}</span>${n}</span></td><td class="fpv">${fin}</td></tr>`).join('')}</table></div>`;
+  if(k==='ncaaw'){body=`<div class="sect" style="font-size:15px;margin-top:20px">AVCA PRESEASON COACHES POLL · AUG 10 <span class="mr">63 BALLOTS</span></div><div class="tbwrap"><table class="tb"><tr><th>RK</th><th>TEAM</th><th>PTS</th><th>1ST-PLACE</th></tr>${POLLW.map(([r,id,fp,pts])=>{const t=TEAMS[id];return `<tr><td class="rk">${r}</td><td><a class="tmc" href="/team/${id}">${tlogo(t,22)}${t.n}</a></td><td class="fpv">${pts||'—'}</td><td class="fpv">${fp||'—'}</td></tr>`}).join('')}</table></div><p style="color:var(--mut);font-size:12px;margin-top:10px">Source: AVCA Division I Coaches Poll, Aug 10, 2026 — revealed with the NCAA. 63 first-place ballots (Nebraska 57, Kentucky 4, Texas 1, Texas A&M 1).</p>`}
+  else if(k==='ncaam'){body=`<div class="sect" style="font-size:15px;margin-top:20px">AVCA NATIONAL COLLEGIATE MEN — FINAL POLL · MAY 12, 2026 <span class="mr">OFFICIAL · FINAL POLL</span></div><div class="tbwrap"><table class="tb"><tr><th>RK</th><th>TEAM</th><th>PTS</th><th>RECORD</th><th>1ST</th></tr>${POLLM.map(([r,id,pts,rec,fp])=>{const t=TEAMS[id];return `<tr><td class="rk">${r}</td><td><a class="tmc" href="/team/${id}">${tlogo(t,22)}${t.n}</a></td><td class="fpv">${pts}</td><td class="fpv">${rec}</td><td class="fpv">${fp||'—'}</td></tr>`}).join('')}</table></div><p style="color:var(--mut);font-size:12px;margin-top:10px">Source: AVCA coaches poll (captured from avca.org). Hawaiʻi finished No. 1 with all 25 first-place votes after beating UC Irvine in the NCAA final.</p>`}
+  else if(k==='lovb'){body=`<div class="sect" style="font-size:15px;margin-top:20px">LOVB 2026 — FINAL <span class="mr">PER LOVB.COM</span></div><div class="tbwrap"><table class="tb"><tr><th>PL</th><th>TEAM</th><th>FINISH</th></tr>${STAND_LOVB.map(([id,fin],i)=>{const t=TEAMS[id];return `<tr><td class="rk">${i+1}</td><td><a class="tmc" href="/team/${id}">${tlogo(t,22)}${t.n}</a></td><td class="fpv">${fin}</td></tr>`}).join('')}</table></div><p style="color:var(--mut);font-size:12px;margin-top:10px">Regular-season standings per lovb.com; Austin beat Salt Lake in the Championship golden set 15-8 (Apr 18, Long Beach). SF Signal + LA, Miami, Minnesota join for 2027.</p>`}
+  else if(k==='mlv'){body=`<div class="sect" style="font-size:15px;margin-top:20px">MLV 2026 — FINAL <span class="mr">FULL STANDINGS</span></div><div class="tbwrap"><table class="tb"><tr><th>PL</th><th>TEAM</th><th>FINISH</th></tr>${STAND_MLV.map(([id,fin],i)=>{const t=TEAMS[id];return `<tr><td class="rk">${i+1}</td><td><a class="tmc" href="/team/${id}">${tlogo(t,22)}${t.n}</a></td><td class="fpv">${fin}</td></tr>`}).join('')}</table></div>`}
+  else if(k==='intl'){const vt=(rows,ttl)=>`<div class="sect" style="font-size:15px;margin-top:20px">${ttl} <span class="mr">FINAL STANDINGS</span></div><div class="tbwrap"><table class="tb"><tr><th>PL</th><th>TEAM</th><th>FINISH</th></tr>${rows.map(([n,fin],i)=>`<tr><td class="rk">${i+1}</td><td><span class="tmc">${VFLAG[n]?`<img src="${FP(VFLAG[n])}" alt="" style="width:24px;height:16px;object-fit:cover;border:1px solid #262626" onerror="${die}">`:''}<span class="mfb" style="width:22px;height:22px;font-size:8px;background:#262626">${n.slice(0,2).toUpperCase()}</span>${n}</span></td><td class="fpv">${fin}</td></tr>`).join('')}</table></div>`;
   body=vt(VNLW,'WOMEN’S VNL 2026 — FINAL FOUR')+vt(VNLM,'MEN’S VNL 2026 — FINAL FOUR')+`<p style="color:var(--mut);font-size:12px;margin-top:10px">Vargas: 33 points in the women’s final — most ever in a VNL final. Full tables sync from the FIVB VIS feed.</p>`}
-  else if(k==='recruit'){body=`<div class="sect" style="font-size:15px;margin-top:20px">2027 CLASS RANKINGS — THE BOARD <span class="mr" style="color:#9fdd8e">REAL · RANKS CITED PER ROW</span></div><div class="tbwrap"><table class="tb"><tr><th>NATL RK</th><th>RECRUIT</th><th>POS</th><th>HOMETOWN</th><th>STATUS</th><th>RANK SOURCE</th></tr>${CLASSBOARD.map(([r,n,pos,hm,st,tid,srcr])=>`<tr><td class="rk">${r}</td><td style="font-weight:700">${personName(n)}</td><td class="fpv">${pos}</td><td class="fpv">${hm}</td><td>${tid?`<span class="tmc">${tlogo(TEAMS[tid],20)}<span style="font-size:11px;font-weight:700">${st}</span></span>`:`<span class="fpv">${st}</span>`}</td><td class="fpv">${srcr}</td></tr>`).join('')}</table></div><p style="color:var(--mut);font-size:12px;margin-top:10px">Ranks: PrepDig public 2027 national list + PrepVolleyball; commitments per SI / Lincoln Journal Star. OTT reports verified public commitments — it does not fabricate rankings.</p>`}
+  else if(k==='recruit'){body=`<div class="sect" style="font-size:15px;margin-top:20px">2027 CLASS RANKINGS — THE BOARD <span class="mr">RANKS CITED PER ROW</span></div><div class="tbwrap"><table class="tb"><tr><th>NATL RK</th><th>RECRUIT</th><th>POS</th><th>HOMETOWN</th><th>STATUS</th><th>RANK SOURCE</th></tr>${CLASSBOARD.map(([r,n,pos,hm,st,tid,srcr])=>`<tr><td class="rk">${r}</td><td style="font-weight:700">${personName(n)}</td><td class="fpv">${pos}</td><td class="fpv">${hm}</td><td>${tid?`<span class="tmc">${tlogo(TEAMS[tid],20)}<span style="font-size:11px;font-weight:700">${st}</span></span>`:`<span class="fpv">${st}</span>`}</td><td class="fpv">${srcr}</td></tr>`).join('')}</table></div><p style="color:var(--mut);font-size:12px;margin-top:10px">Ranks: PrepDig public 2027 national list + PrepVolleyball; commitments per SI / Lincoln Journal Star. OTT reports verified public commitments — it does not fabricate rankings.</p>`}
   else{body=`<p style="color:var(--ink2);margin-top:20px;font-size:14px">Rankings publish here weekly in season.</p>`}
  }else if(tab==='teams'){
-  if(k==='intl'){body=`<div class="sect" style="font-size:15px;margin-top:20px">VNL 2026 FIELDS <span class="mr">FLAGS — PUBLIC DOMAIN</span></div><div class="tgrid">${VNL.map(([n,f])=>`<span class="tcard" style="--tc:#262626"><span class="lgw"><img src="${FP(f)}" alt="" style="max-height:34px;border:1px solid #262626" onerror="${die}"><span class="mfb" style="background:#262626;font-size:11px">${n.slice(0,2).toUpperCase()}</span></span><span class="n">${n}</span><span class="r">VNL 2026</span></span>`).join('')}</div>`}
+  if(k==='intl'){body=`<div class="sect" style="font-size:15px;margin-top:20px">VNL 2026 FIELDS <span class="mr">2026 FIELD</span></div><div class="tgrid">${VNL.map(([n,f])=>`<span class="tcard" style="--tc:#262626"><span class="lgw"><img src="${FP(f)}" alt="" style="max-height:34px;border:1px solid #262626" onerror="${die}"><span class="mfb" style="background:#262626;font-size:11px">${n.slice(0,2).toUpperCase()}</span></span><span class="n">${n}</span><span class="r">VNL 2026</span></span>`).join('')}</div>`}
   else{body=`<p style="color:var(--ink2);margin-top:20px;font-size:14px">Use the TEAMS dropdown in the bar above.</p>`}
  }else if(tab==='portal'){
-  if(k==='recruit'){body=`<div class="sect" style="font-size:15px;margin-top:20px">THE COMMIT WIRE <span class="mr" style="color:#9fdd8e">REAL COMMITMENTS · SOURCED</span></div><div class="rail">${COMMITWIRE.map(([n,pos,tid,srcr])=>`<a href="/hub/recruit"><span class="rlg"><img src="${TEAMS[tid].img}" alt="" onerror="${die}"><span class="mfb" style="background:${TEAMS[tid].c1}"></span></span><span><span class="h">⭐ ${personName(n)} → ${TEAMS[tid].n}</span><span class="m" style="display:block">${pos} · ${srcr}</span></span></a>`).join('')}</div><div class="sect" style="font-size:15px;margin-top:28px">LATEST</div><div class="grid3">${ARTICLES.filter(a=>a.lg==='recruit').map(a=>acard(a,'sm')).join('')}</div>`}
+  if(k==='recruit'){body=`<div class="sect" style="font-size:15px;margin-top:20px">THE COMMIT WIRE <span class="mr">EVERY ITEM SOURCED</span></div><div class="rail">${COMMITWIRE.map(([n,pos,tid,srcr])=>`<a href="/hub/recruit"><span class="rlg"><img src="${TEAMS[tid].img}" alt="" onerror="${die}"><span class="mfb" style="background:${TEAMS[tid].c1}"></span></span><span><span class="h">⭐ ${personName(n)} → ${TEAMS[tid].n}</span><span class="m" style="display:block">${pos} · ${srcr}</span></span></a>`).join('')}</div><div class="sect" style="font-size:15px;margin-top:28px">LATEST</div><div class="grid3">${ARTICLES.filter(a=>a.lg==='recruit').map(a=>acard(a,'sm')).join('')}</div>`}
   else{body=`<div class="sect" style="font-size:15px;margin-top:20px">${L.portal.toUpperCase()} <span class="mr">SOURCED ONLY — EVERY ITEM CARRIES ITS SOURCE</span></div><p style="color:var(--ink2);margin-top:14px;font-size:14px">Nothing on the ${L.portal.toLowerCase()} wire that we can source yet. Items appear here only with a named source attached.</p><div class="grid3" style="margin-top:24px">${arts.slice(0,3).map(a=>acard(a,'sm')).join('')}</div>`}
  }
  return kick+body;
@@ -335,17 +387,21 @@ function mcard(m){
  const A=m.a.t?TEAMS[m.a.t]:null,B=m.b.t?TEAMS[m.b.t]:null;
  const row=(x,X,l)=>`<div class="tr ${l?'los':''}">${X?tlogo(X,22):''}<span>${X?X.n:x.n}</span><span class="rec">${X&&X.rk?'NO. '+X.rk:''}</span><span class="sc">${x.sc!==undefined?x.sc:''}</span></div>`;
  const done=m.st==='FINAL';
- return `<div class="mcard"><div class="st"><span>${m.lg} · ${m.day}</span><span class="${m.live?'live':''}">${m.live?'● LIVE':m.st}</span></div>
+ // Only a link when there is a box score behind it. A click that lands on an empty page is
+ // worse than no link, so the affordance appears with the data and not before.
+ const inner=`<div class="st"><span>${m.lg} · ${m.day}</span><span class="${m.live?'live':''}">${m.live?'● LIVE':m.st}</span></div>
  ${row(m.a,A,done&&!m.a.w)}${row(m.b,B,done&&!m.b.w)}
- ${m.sets?`<div class="sets">${m.sets}</div>`:''}</div>`;
+ ${m.sets?`<div class="sets">${m.sets}</div>`:''}`;
+ if(m.box&&m.mkey)return `<a class="mcard mlink" href="/match/${attr(m.mkey)}">${inner}<div class="mbox">FULL BOX SCORE <span>›</span></div></a>`;
+ return `<div class="mcard">${inner}</div>`;
 }
 function pgScores(){
- let day='';let h=`<span class="kick"><b style="color:var(--red)">●</b> SCORES — NCAA WOMEN LIVE FROM THE FEED · MORE LEAGUES AS THEIR SEASONS OPEN</span><h1 class="pg">SCORES</h1><div class="dnav">${['ALL'].concat([...new Set(MATCHES.map(m=>m.lg))]).map((x,i)=>`<button class="${i===0?'on':''}" onclick="[...this.parentElement.children].forEach(b=>b.classList.remove('on'));this.classList.add('on');document.querySelectorAll('.mwrap .mcard').forEach(c=>c.style.display=(this.textContent==='ALL'||c.dataset.lg===this.textContent)?'flex':'none')">${x}</button>`).join('')}</div><div class="mwrap">`;
- MATCHES.forEach(m=>{
-  if(m.day!==day){day=m.day;h+=`<div class="sect" style="margin-top:30px;font-size:15px">${day}<span class="mr">MIDNIGHT CT ROLLOVER</span></div><div class="grid3">`}
-  h+=mcard(m).replace('<div class="mcard">',`<div class="mcard" data-lg="${m.lg}">`);
-  const idx=MATCHES.indexOf(m);
-  if(idx===MATCHES.length-1||MATCHES[idx+1].day!==m.day)h+='</div>';
+ let day='';let h=`<span class="kick"><b style="color:var(--red)">●</b> SCORES — NCAA WOMEN LIVE FROM THE FEED · MORE LEAGUES AS THEIR SEASONS OPEN</span><h1 class="pg">SCORES</h1><div class="dnav">${['ALL'].concat([...new Set(MATCHES.map(m=>m.lg))]).map((x,i)=>`<button class="${i===0?'on':''}" onclick="[...this.parentElement.children].forEach(b=>b.classList.remove('on'));this.classList.add('on');document.querySelectorAll('.mwrap .mcard').forEach(c=>c.style.display=(this.textContent==='ALL'||c.dataset.lg===this.textContent)?'':'none')">${x}</button>`).join('')}</div><div class="mwrap">`;
+ const ORDER=boardOrder(MATCHES);
+ ORDER.forEach((m,idx)=>{
+  if(m.day!==day){day=m.day;h+=`<div class="sect" style="margin-top:30px;font-size:15px">${day}<span class="mr">${m.st==='FINAL'?'FINAL':'MIDNIGHT CT ROLLOVER'}</span></div><div class="grid3">`}
+  h+=mcard(m).replace(/^<(a|div) class="mcard/,`<$1 data-lg="${attr(m.lg)}" class="mcard`);
+  if(idx===ORDER.length-1||ORDER[idx+1].day!==m.day)h+='</div>';
  });
  return h+'</div>';
 }
@@ -421,17 +477,11 @@ function pgNews(){
  <p class="consent">You must be 13 or older to subscribe. By signing up you agree to receive updates and offers from Off The Tape and you accept our <a href="/legal/terms">Terms of Use</a> and <a href="/legal/privacy">Privacy Policy</a>. Unsubscribe any time via the link in every email. We currently have no affiliate or betting partners.</p>
  </div>`;
 }
-function pgAbout(){
- return `<div class="legal"><span class="kick"><b style="color:var(--red)">●</b> OFF THE TAPE</span><h1 class="pg">ABOUT</h1>
- <p style="margin-top:16px">OFF THE TAPE is the independent home of everything volleyball — NCAA women and men, LOVB, MLV, the AVP tour and the international game — covered daily with live scores, sourced reporting and the film-room eye the sport deserves.</p>
- <p>We aggregate in our own words and credit every source. Photography is used with permission or under license, and credited on every image.</p>
- <h2>CONTACT</h2><p>ashwin@off-the-tape.com — tips, corrections, media and partnership inquiries welcome.</p></div>`;
-}
 function pg404(){return `<div style="text-align:center;padding:60px 0"><div class="slab" style="font-size:60px;color:var(--ln)">404</div><p class="mono" style="font-size:10px;letter-spacing:.2em;color:var(--mut)">OUT OF BOUNDS — <a href="/" style="color:var(--red)">BACK HOME</a></p></div>`}
 
 module.exports = {
-  setCtx, art, toMatch, normDay, ageLabel, tlogo, tlg, die, STAR, FP, VFLAG,
+  setCtx, art, toMatch, normDay, ageLabel, tlogo, tlg, die, STAR, FP, VFLAG, boardOrder, MATCHCSS,
   cov, photoCov, acard, railItem, mcard, tickerHTML, tickerOrder, noEmoji, personName, DIV, nlStrip, embedsHTML,
   optImg, imgHostOK, IMG_HOSTS,
-  pgHome, pgHub, pgScores, pgTeam, pgArticle, pgNews, pgAbout, pg404
+  pgHome, pgHub, pgScores, pgTeam, pgArticle, pgNews, pg404
 };
