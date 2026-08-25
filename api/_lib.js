@@ -136,6 +136,20 @@ const escMatch = m => ({
   sets: Array.isArray(m.sets) ? m.sets.map(x => esc(x ?? '')) : (m.sets == null ? m.sets : esc(m.sets))
 });
 
+// Which fixtures have a box score written for them. One query, so the board can link only the
+// matches that actually have somewhere to go — a click that lands on an empty page is worse
+// than no link at all.
+async function boxKeys() {
+  try { return new Set((await supaGet('match_box?select=mkey')).map(r => r.mkey)); }
+  catch (_) { return new Set(); }
+}
+async function getMatchBox(mkey) {
+  const k = String(mkey || '').replace(/[^a-z0-9-]/g, '');
+  if (!k) return null;
+  const rows = await supaGet(`match_box?select=*&mkey=eq.${encodeURIComponent(k)}&limit=1`);
+  return rows.length ? rows[0] : null;
+}
+
 async function getMatches() {
   const rows = (await supaGet('matches?select=*&order=id.asc')).map(escMatch);
   // Same day + same two teams = one card. The row that knows the most wins:
@@ -144,7 +158,13 @@ async function getMatches() {
   const rich = x => (x.status === 'FINAL' ? 8 : 0) + (x.a_team ? 2 : 0) + (x.b_team ? 2 : 0) + (x.source ? 1 : 0);
   const seen = new Map();
   for (const m of rows) { const k = key(m), prev = seen.get(k); if (!prev || rich(m) > rich(prev)) seen.set(k, m); }
-  return [...seen.values()].map(R.toMatch).sort((a, b) => (a.sort || 0) - (b.sort || 0));
+  const boxes = await boxKeys();
+  return [...seen.values()].map(row => {
+    const m = R.toMatch(row);
+    m.mkey = TK.matchKey(R.normDay(row.day_label).dk, row.league_key, row.a_team, row.a_name, row.b_team, row.b_name);
+    m.box = boxes.has(m.mkey);
+    return m;
+  }).sort((a, b) => (a.sort || 0) - (b.sort || 0));
 }
 
 // ---------- chrome ----------
@@ -300,7 +320,7 @@ function fail(res, e) {
   res.status(500).send(`<!doctype html><meta charset="utf-8"><title>OFF THE TAPE</title><body style="background:#171614;color:#E7E2D8;font-family:system-ui;padding:40px"><h1 style="color:#FF1F3D">OFF THE TAPE</h1><p>Something broke on our side — try again in a minute.</p></body>`);
 }
 
-module.exports = { safeUrl, safeColor, jsonForScript, escArticle, escMatch,
+module.exports = { safeUrl, safeColor, jsonForScript, escArticle, escMatch, boxKeys, getMatchBox,
   DATA, LEAGUES, TEAMS, CONF, CONFORDER, VNL, POLLW, POLLM, STAND_LOVB, STAND_MLV, VNLW, VNLM, CLASSBOARD, COMMITWIRE,
   R, HEAT, supaGet, supaWrite, esc, attr, stripEmoji, die, getArticles, getMatches,
   header, panel, footer, nlPopup, page, ok, fail, SITE, LAUNCHED
