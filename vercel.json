@@ -25,6 +25,10 @@
       "destination": "/api/page-scores"
     },
     {
+      "source": "/match/:mkey",
+      "destination": "/api/page-match?mkey=:mkey"
+    },
+    {
       "source": "/newsletter",
       "destination": "/api/subscribe"
     },
