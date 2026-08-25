@@ -202,7 +202,21 @@ const DESKCSS = `<style>
 // now writes its rewrite into articles.pending instead. Nothing public reads that column, so
 // the rewrite sits invisible until Ashwin taps APPLY here. Option B survives a bulk rewrite.
 
-const PENDING_FIELDS = ['h', 'dek', 'chip', 'sections', 'sources'];   // whitelist — see applyPending
+const PENDING_FIELDS = ['h', 'dek', 'chip', 'sections', 'sources'];   // whitelist — see applyPatch
+
+// The exact patch APPLY writes, in one testable place. Two rules with history behind them:
+// only whitelisted fields cross over (a desk cannot smuggle status or published_at through
+// `pending`), and when the rewrite brings new sections, `body` becomes their flattened paras —
+// NOT null. articles.body is a NOT NULL column and the flat fallback some renderers read;
+// setting it null here is what made every APPLY tap fail with a 400 on 25 Aug, which the desk
+// then hid behind a generic error page. The harness now asserts this shape.
+function applyPatch(p) {
+  const patch = { pending: null, pending_at: null };
+  for (const f of PENDING_FIELDS) if (p[f] !== undefined) patch[f] = p[f];
+  if (patch.sections) patch.body = patch.sections.flatMap(s => (s && s.paras) || []);
+  if (patch.sources && !patch.sources.length) patch.sources = null;
+  return patch;
+}
 
 // RAW on both sides. The live article arrives escaped from the boundary and the staged copy
 // is raw JSON straight out of `pending`, so comparing the display forms would mark every
@@ -407,19 +421,12 @@ module.exports = async (req, res) => {
         return seeOther(res, `/approve?done=${action}&id=${encodeURIComponent(id)}`);
       }
 
-      // Applying a staged rewrite. The whitelist is the point: a desk cannot smuggle
-      // status or published_at through this column, so applying is always a text change and
-      // never a publish. An unpublished article stays unpublished. And a field the rewrite
-      // never mentions is left exactly as it is — which is what the review page now says too.
+      // Applying a staged rewrite — see applyPatch above for the two rules that govern it.
       if (id && action === 'applyrw') {
         const a = await S.anyById(id);
         const p = (a && a.pending) || null;
         if (!p) return seeOther(res, '/approve');
-        const patch = { pending: null, pending_at: null };
-        for (const f of PENDING_FIELDS) if (p[f] !== undefined) patch[f] = p[f];
-        if (patch.sections) patch.body = null;          // sections wins; don't leave a stale flat body
-        if (patch.sources && !patch.sources.length) patch.sources = null;
-        await L.supaWrite(`articles?id=eq.${id}`, 'PATCH', patch);
+        await L.supaWrite(`articles?id=eq.${id}`, 'PATCH', applyPatch(p));
         return seeOther(res, `/approve?done=applyrw&id=${encodeURIComponent(id)}`);
       }
       if (id && action === 'droprw') {
@@ -524,5 +531,17 @@ ${arch.map(a => `<div class="card" style="padding:10px 16px;opacity:.72"><div st
 <div class="drow" style="gap:8px;flex:none"><a class="deskbtn ghost" href="/approve?edit=${L.attr(a.id)}">EDIT</a>
 <form method="POST" action="/approve" style="margin:0"><input type="hidden" name="csrf" value="${L.attr(csrf)}"><input type="hidden" name="id" value="${L.attr(a.id)}"><button class="deskbtn pub" name="action" value="restore" type="submit">RESTORE</button></form></div></div></div>`).join('')}` : ''}`;
     L.ok(res, P(shell(body)), 0);
-  } catch (e) { L.fail(res, e); }
+  } catch (e) {
+    // The desk is the one surface where the operator needs the real reason on screen — a
+    // swallowed constraint error cost a day on 25 Aug. Editors see the message; anyone not
+    // signed in still gets the plain failure page with no internals.
+    try {
+      if (A.isEditor(req)) {
+        return L.ok(res, P(shell(`<div class="warnbox">THE DESK HIT AN ERROR — nothing was saved.<br><span style="font-family:'JetBrains Mono',monospace;font-size:11px">${L.esc(String((e && e.message) || e))}</span></div>
+<p style="margin-top:12px"><a href="/approve" style="color:var(--w);text-decoration:underline">Back to the desk</a></p>`)), 0, 500);
+      }
+    } catch (_) { /* fall through to the generic page */ }
+    L.fail(res, e);
+  }
 };
+module.exports.applyPatch = applyPatch;
