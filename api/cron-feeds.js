@@ -1,9 +1,15 @@
 // GET /api/cron-feeds — the score pipeline for every league, in one function.
 // Each adapter is isolated: a failing feed reports its error and the others still write.
 // Writes rows tagged with `source` so feed data never clobbers hand-entered rows.
-// PREVIEW MODE (no writes) unless the caller is authorised AND SUPABASE_SERVICE_ROLE_KEY is set.
+// It UPSERTS on (source, mkey) so the board never blinks empty between runs, and it is safe
+// to call every minute — see the gate at the bottom.
 const { supaGet, supaWrite, ok, fail } = require('./_supa.js');
 const DATA = require('./_data.js');
+// The poller now writes the same fixture token the board reads, so it can UPSERT rather than
+// wipe and rewrite. Both sides must compute it identically or nothing lines up — which is the
+// entire reason _teamkey.js exists. normDay() comes from the renderer for the same reason.
+const TK = require('./_teamkey.js');
+const { normDay } = require('./_render.js');
 
 const WINDOW_BACK = 3, WINDOW_FWD = 21;   // days of slate we keep on the board
 
@@ -72,15 +78,37 @@ async function espn(sportPath, league_key, league) {
   const mapped = (data.events || []).filter(ev => inWindow(ev.date)).map(ev => {
     const c = ev.competitions && ev.competitions[0];
     const [h, a] = (c && c.competitors) || [];
-    const done = ev.status && ev.status.type && ev.status.type.completed;
+    const st = (ev.status && ev.status.type) || {};
+    const done = !!st.completed;
+    // 'pre' | 'in' | 'post'. This is the field the board's LIVE state has always wanted and
+    // never received — no adapter set `live`, so the red dot and the live-first ordering were
+    // dead code for every feed row on the site.
+    const live = st.state === 'in';
     const net = c && c.broadcasts && c.broadcasts[0] && c.broadcasts[0].names && c.broadcasts[0].names[0];
+    // Per-set scores, which ESPN has had all along under competitor.linescores. `a` is the
+    // away side, matching how the row is written below, so the pairs read away-home.
+    const ln = x => ((x && x.linescores) || []).map(v => v && v.value);
+    const la = ln(a), lb = ln(h);
+    const n = Math.min(la.length, lb.length);
+    const sets = n ? Array.from({ length: n }, (_, i) => `${la[i]}-${lb[i]}`) : null;
+    // A score exists the moment a match starts, not only when it ends.
+    const scored = done || live;
+    const day_label = dayLabel(ev.date);
+    const a_team = a ? tid(a.team) : null, b_team = h ? tid(h.team) : null;
+    const a_name = a ? up(a.team.abbreviation || a.team.shortDisplayName) : 'TBA';
+    const b_name = h ? up(h.team.abbreviation || h.team.shortDisplayName) : 'TBA';
     return {
-      day_label: dayLabel(ev.date), league_key, league,
-      status: done ? 'FINAL' : ctTime(ev.date), network: net || null,
-      a_team: a ? tid(a.team) : null, a_name: a ? up(a.team.abbreviation || a.team.shortDisplayName) : 'TBA',
-      a_score: done && a ? Number(a.score) : null, a_win: done && a ? (a.winner ? 1 : 0) : 0,
-      b_team: h ? tid(h.team) : null, b_name: h ? up(h.team.abbreviation || h.team.shortDisplayName) : 'TBA',
-      b_score: done && h ? Number(h.score) : null, sets: null
+      day_label, league_key, league,
+      status: done ? 'FINAL' : live ? up(st.shortDetail || st.description || 'LIVE') : ctTime(ev.date),
+      live: live ? 1 : 0,
+      network: net || null,
+      venue: (c && c.venue && c.venue.fullName) || null,
+      a_team, a_name,
+      a_score: scored && a ? Number(a.score) : null, a_win: done && a ? (a.winner ? 1 : 0) : 0,
+      b_team, b_name,
+      b_score: scored && h ? Number(h.score) : null,
+      sets,
+      mkey: TK.matchKey(normDay(day_label).dk, league_key, a_team, a_name, b_team, b_name)
     };
   });
   // D-I runs hundreds of matches a week. The board covers the teams we cover:
@@ -100,11 +128,18 @@ async function lovb() {
     const an = nameOf(g.awayTeam || g.away || g.teamB), bn = nameOf(g.homeTeam || g.home || g.teamA);
     return {
       day_label: dayLabel(when), league_key: 'lovb', league: 'LOVB',
-      status: ctTime(when), network: (g.venue && (g.venue.name || g.venue)) ? String(g.venue.name || g.venue).toUpperCase().slice(0, 22) : null,
+      status: ctTime(when),
+      // The venue used to be written into `network`, because there was no venue column and
+      // the adapter had nowhere else to put it. That is why 'AT&T STADIUM' was sitting on the
+      // board where 'FS2' belongs. LOVB's API does not publish a broadcaster, so network stays
+      // null until it does.
+      network: null,
+      venue: (g.venue && (g.venue.name || g.venue)) ? String(g.venue.name || g.venue) : null,
       a_team: resolveTeam('lovb', an), a_name: an || 'TBA',
       a_score: null, a_win: 0,
       b_team: resolveTeam('lovb', bn), b_name: bn || 'TBA',
-      b_score: null, sets: null
+      b_score: null, sets: null,
+      mkey: TK.matchKey(normDay(dayLabel(when)).dk, 'lovb', resolveTeam('lovb', an), an, resolveTeam('lovb', bn), bn)
     };
   });
 }
@@ -137,10 +172,11 @@ async function fivb() {
     const done = !!parts;
     return {
       day_label: dayLabel(m.MatchDateTimeUTC), league_key: 'intl', league: 'FIVB',
-      status: done ? 'FINAL' : ctTime(m.MatchDateTimeUTC), network: null,
+      status: done ? 'FINAL' : ctTime(m.MatchDateTimeUTC), network: null, venue: null,
       a_team: null, a_name: up(m.TeamAName), a_score: done ? Number(parts[1]) : null,
       a_win: done && Number(parts[1]) > Number(parts[2]) ? 1 : 0,
-      b_team: null, b_name: up(m.TeamBName), b_score: done ? Number(parts[2]) : null, sets: null
+      b_team: null, b_name: up(m.TeamBName), b_score: done ? Number(parts[2]) : null, sets: null,
+      mkey: TK.matchKey(normDay(dayLabel(m.MatchDateTimeUTC)).dk, 'intl', null, up(m.TeamAName), null, up(m.TeamBName))
     };
   });
 }
@@ -181,9 +217,10 @@ async function mlv() {
     const an = up(c[ciAway]), bn = up(c[ciHome]);
     return {
       day_label: dayLabel(c[ciDate]), league_key: 'mlv', league: 'MLV',
-      status: done ? 'FINAL' : ctTime(c[ciDate]), network: null,
+      status: done ? 'FINAL' : ctTime(c[ciDate]), network: null, venue: null,
       a_team: resolveTeam('mlv', an), a_name: an, a_score: done ? aw : null, a_win: done && aw > hw ? 1 : 0,
-      b_team: resolveTeam('mlv', bn), b_name: bn, b_score: done ? hw : null, sets: null
+      b_team: resolveTeam('mlv', bn), b_name: bn, b_score: done ? hw : null, sets: null,
+      mkey: TK.matchKey(normDay(dayLabel(c[ciDate])).dk, 'mlv', resolveTeam('mlv', an), an, resolveTeam('mlv', bn), bn)
     };
   });
 }
@@ -191,22 +228,25 @@ async function mlv() {
 // AVP: ~12 events a year, no machine-readable results feed (see feed-sources doc).
 // Handled by the Data Desk on event weekends rather than guessed at here.
 
+// `months` is the season window, in US Central months. Out of season a feed is skipped
+// rather than fetched: the poller now runs every few minutes instead of once a day, and there
+// is no reason to hit ESPN's men's endpoint 288 times on a Tuesday in September to be told
+// again that the men's season starts in January. A skipped feed is stamped 'offseason' in
+// feed_status so it reads as deliberate rather than dead.
 const FEEDS = [
-  { key: 'espn_ncaaw', run: () => espn('womens-college-volleyball', 'ncaaw', 'NCAA W') },
-  { key: 'espn_ncaam', run: () => espn('mens-college-volleyball', 'ncaam', 'NCAA M') },
-  { key: 'lovb_api', run: lovb },
-  { key: 'fivb_vis', run: fivb },
-  { key: 'mlv_volleydata', run: mlv }
+  { key: 'espn_ncaaw', months: [8, 9, 10, 11, 12], run: () => espn('womens-college-volleyball', 'ncaaw', 'NCAA W') },
+  { key: 'espn_ncaam', months: [1, 2, 3, 4, 5], run: () => espn('mens-college-volleyball', 'ncaam', 'NCAA M') },
+  { key: 'lovb_api', months: [12, 1, 2, 3, 4, 5], run: lovb },
+  { key: 'fivb_vis', months: null, run: fivb },          // international runs most of the year
+  { key: 'mlv_volleydata', months: [1, 2, 3, 4, 5], run: mlv }
 ];
+const inSeason = f => !f.months || f.months.includes(Number(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'numeric' })));
 
-// This endpoint deletes and rewrites the entire `matches` table with the service-role key, and
-// it had no authentication of any kind — anyone who guessed the path could rewrite the board,
-// or simply hold it open and bill us for five upstream fetches a call. Vercel Cron sends
-// `Authorization: Bearer $CRON_SECRET`, so that is the check.
-//
-// Fail-safe: no CRON_SECRET set means no writes at all, only the preview report. A missing
-// secret must never mean "let everyone in".
-function authorised(req) {
+// This endpoint writes the whole board with the service-role key. It used to have no
+// authentication at all — anyone who guessed the path could rewrite it, or hold it open and
+// bill us for five upstream fetches a call. Vercel Cron sends `Authorization: Bearer
+// $CRON_SECRET`, so a matching secret is the fast path.
+function secretMatches(req) {
   const want = process.env.CRON_SECRET;
   if (!want) return false;
   const got = String((req.headers && (req.headers.authorization || req.headers.Authorization)) || '');
@@ -217,26 +257,81 @@ function authorised(req) {
   return diff === 0;
 }
 
+// FAIL LOUD, NOT SILENT. The first version of this refused to write anything unless
+// CRON_SECRET was set, which is the safe-looking choice and the wrong one: an unset
+// environment variable would have taken the site's scores dark and nothing would have said
+// so. For a news site, silently stale is a worse failure than an open endpoint that only
+// re-reads public sports feeds.
+//
+// So: secret set and matching -> write. Secret set and wrong -> preview only. Secret not set
+// at all -> still write, but stamp the warning into feed_status on every single run so it
+// surfaces on the DATA page until somebody sets it.
+//
+// The abuse angle is closed by the throttle rather than by the lock. An unauthenticated
+// caller cannot run this more often than once a minute, because the gate is the newest
+// last_ok in feed_status — durable, shared across every serverless instance, and exactly the
+// cadence the poller wants anyway.
+const MIN_GAP_MS = 55e3;
+async function gate(req) {
+  const configured = !!process.env.CRON_SECRET;
+  if (configured && secretMatches(req)) return { write: true, why: 'authorised' };
+  if (configured) return { write: false, why: 'bad or missing CRON_SECRET — preview only' };
+  let newest = 0;
+  try {
+    const rows = await supaGet('feed_status?select=last_ok&order=last_ok.desc.nullslast&limit=1');
+    newest = rows.length && rows[0].last_ok ? new Date(rows[0].last_ok).getTime() : 0;
+  } catch (_) { /* if we cannot read the clock, let the run through */ }
+  if (newest && Date.now() - newest < MIN_GAP_MS) {
+    return { write: false, why: `throttled — last run ${Math.round((Date.now() - newest) / 1000)}s ago, minimum gap is ${MIN_GAP_MS / 1000}s` };
+  }
+  return { write: true, why: 'CRON_SECRET IS NOT SET — this endpoint is writing unauthenticated. Set it in Vercel.', unsecured: true };
+}
+
 module.exports = async (req, res) => {
-  const allowed = authorised(req);
-  // The report is harmless; the writes are not. An unauthorised caller gets preview mode, and
-  // is told nothing about whether the service key exists.
-  const key = allowed ? process.env.SUPABASE_SERVICE_ROLE_KEY : null;
+  const g = await gate(req);
+  const key = g.write ? process.env.SUPABASE_SERVICE_ROLE_KEY : null;
   const only = String((req.query && req.query.feed) || '');
   const report = {};
   try {
     for (const f of FEEDS) {
       if (only && only !== f.key) continue;
+      // `?feed=` forces a specific feed regardless of season, so a live event outside the
+      // usual window can still be pulled by hand.
+      if (!only && !inSeason(f)) {
+        report[f.key] = { ok: true, skipped: 'offseason' };
+        if (key) await supaWrite(`feed_status?feed=eq.${f.key}`, 'PATCH',
+          { note: `offseason — not polled (season months ${f.months.join(', ')})` }, key).catch(() => {});
+        continue;
+      }
       try {
         const rows = (await f.run()).map(r => ({ ...r, source: f.key }));
         const named = rows.filter(r => r.a_team && r.b_team).length;
-        report[f.key] = { ok: true, found: rows.length, linked: named, sample: rows.slice(0, 2) };
+        const liveNow = rows.filter(r => r.live).length;
+        // Names we could not resolve to a team id. These are the rows that render without a
+        // logo and without a team-page link, so they are worth surfacing rather than counting.
+        const unlinked = [...new Set(rows.flatMap(r => [r.a_team ? null : r.a_name, r.b_team ? null : r.b_name]).filter(Boolean))];
+        report[f.key] = { ok: true, found: rows.length, linked: named, live: liveNow, unlinked: unlinked.slice(0, 25), sample: rows.slice(0, 2) };
         if (!key) { report[f.key].mode = 'preview'; continue; }
-        await supaWrite(`matches?source=eq.${f.key}`, 'DELETE', undefined, key);
-        if (rows.length) await supaWrite('matches', 'POST', rows, key);
-        await supaWrite(`feed_status?feed=eq.${f.key}`, 'PATCH',
-          { note: `live — wrote ${rows.length} rows (${named} logo-linked)`, last_ok: new Date().toISOString() }, key);
-        report[f.key].wrote = rows.length;
+
+        // UPSERT, not delete-then-insert. Those were two separate calls with no transaction
+        // around them, so every run opened a gap of a few hundred milliseconds where the board
+        // had no rows. Once a day that is invisible; every minute it is a flicker somebody
+        // eventually hits. Rows that have genuinely dropped out of the feed window are removed
+        // afterwards, by mkey, so nothing is ever deleted before its replacement exists.
+        const keyed = rows.filter(r => r.mkey);
+        if (keyed.length) await supaWrite('matches', 'POST', keyed, key, 'resolution=merge-duplicates');
+        const keep = keyed.map(r => `"${r.mkey}"`).join(',');
+        await supaWrite(
+          keep ? `matches?source=eq.${f.key}&mkey=not.in.(${encodeURIComponent(keep)})`
+               : `matches?source=eq.${f.key}`,
+          'DELETE', undefined, key
+        ).catch(() => {});
+
+        await supaWrite(`feed_status?feed=eq.${f.key}`, 'PATCH', {
+          note: `${g.unsecured ? '⚠ UNSECURED — set CRON_SECRET in Vercel · ' : ''}live — ${rows.length} rows, ${named} logo-linked${liveNow ? `, ${liveNow} in progress` : ''}${unlinked.length ? ` · unlinked: ${unlinked.slice(0, 6).join(', ')}` : ''}`.slice(0, 500),
+          last_ok: new Date().toISOString()
+        }, key);
+        report[f.key].wrote = keyed.length;
       } catch (e) {
         report[f.key] = { ok: false, error: String(e && e.message || e) };
         if (key) await supaWrite(`feed_status?feed=eq.${f.key}`, 'PATCH', { note: `error — ${String(e && e.message || e).slice(0, 140)}` }, key).catch(() => {});
@@ -254,6 +349,6 @@ module.exports = async (req, res) => {
         report._sweep = retired.length ? `removed rows left by retired feed key(s): ${retired.join(', ')}` : 'no retired feed rows';
       } catch (e) { report._sweep = `sweep skipped — ${String(e && e.message || e)}`; }
     }
-    ok(res, { mode: key ? 'live' : 'preview', feeds: report }, 0);
+    ok(res, { mode: key ? 'live' : 'preview', gate: g.why, feeds: report }, 0);
   } catch (e) { fail(res, e); }
 };

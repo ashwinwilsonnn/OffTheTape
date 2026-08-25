@@ -11,12 +11,17 @@ async function supaGet(path) {
   return r.json();
 }
 
-async function supaWrite(path, method, body, serviceKey) {
+// `prefer` lets a caller ask for an upsert: 'resolution=merge-duplicates' makes a POST
+// update the row that collides on a unique index instead of failing. The poller needs it
+// because DELETE-then-INSERT is two separate calls, not a transaction, and every run left a
+// window where the board had no rows at all.
+async function supaWrite(path, method, body, serviceKey, prefer) {
   const r = await fetch(`${SUPA_URL}/rest/v1/${path}`, {
     method,
     headers: {
       apikey: serviceKey, Authorization: `Bearer ${serviceKey}`,
-      'Content-Type': 'application/json', Prefer: 'return=minimal'
+      'Content-Type': 'application/json',
+      Prefer: prefer ? `return=minimal,${prefer}` : 'return=minimal'
     },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
