@@ -91,4 +91,19 @@ function teamKeyAnyLeague(id, name) {
   return '?' + k.slice(0, 8);
 }
 
-module.exports = { norm, TEAM_INDEX, ALIAS, resolveTeam, teamKey, teamKeyAnyLeague };
+// The token that identifies a FIXTURE, for the same reason teamKey exists: the reader and the
+// writer have to agree. A box score is written by the Data Desk in the morning and read by the
+// match page all day, and in between the feed poller deletes and re-inserts every row it owns
+// with fresh serial ids — so matches.id cannot be the link. Day plus the two teams can.
+//
+// URL-safe by construction: MMDD, then the two team keys sorted, hyphen-separated. teamKey
+// returns '?xxx' for a team we do not recognise; that becomes 'x-xxx' here so the whole thing
+// stays [a-z0-9-] and can sit in a path segment without encoding.
+const urlSafe = k => String(k || '').replace(/^\?/, 'x-').replace(/[^a-z0-9-]/g, '');
+function matchKey(dayKey, lg, aTeam, aName, bTeam, bName) {
+  const dk = String(dayKey || '').replace(/-/g, '');           // '08-22' -> '0822'
+  const pair = [teamKey(lg, aTeam, aName), teamKey(lg, bTeam, bName)].map(urlSafe).sort();
+  return `${dk}-${pair[0]}-${pair[1]}`;
+}
+
+module.exports = { norm, TEAM_INDEX, ALIAS, resolveTeam, teamKey, teamKeyAnyLeague, matchKey };
