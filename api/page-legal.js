@@ -4,6 +4,7 @@ const PAGES = {
   about: { t: 'About Off The Tape', h: `
 <p>Off The Tape is an independent volleyball media brand covering the entire sport — NCAA women's and men's volleyball, LOVB, Major League Volleyball, the AVP and beach game, the international calendar, and recruiting — with a US-first focus.</p>
 <p>We publish daily: news, recaps, rankings analysis and features, built on sourced reporting. Every table on this site cites where its numbers come from, and every article lists its sources at the bottom.</p>
+<p>That is the standard, and we are not there yet on our own back catalogue. A small number of pieces published in the site's first week carry no source list, because they predate the rule. They are being rewritten with sources attached rather than quietly deleted, and this line comes down when the last one is done.</p>
 <h2>How we work</h2>
 <p>Off The Tape uses AI-assisted production. Our stories are drafted with the help of automated research and writing tools, and every article is reviewed and approved by a human editor before publication. Nothing publishes on its own. When we get something wrong, we correct it quickly and say so — see our <a href="/legal/corrections" style="text-decoration:underline">corrections policy</a>.</p>
 <h2>Photos and social media</h2>
@@ -17,7 +18,7 @@ const PAGES = {
 <h2>Our content</h2>
 <p>Original OTT articles, graphics and design are ours. Team names, logos and league marks belong to their owners and appear for identification and news reporting. Social-media content appears through the platforms' own embed tools and remains the property of its posters.</p>
 <h2>AI-assisted production</h2>
-<p>OTT uses AI-assisted research and drafting tools in producing its content. Every article is reviewed and approved by a human editor before publication, and every article lists its sources. If you believe something we published is inaccurate, contact ashwin@off-the-tape.com and we will review it promptly.</p>
+<p>OTT uses AI-assisted research and drafting tools in producing its content. Every article is reviewed and approved by a human editor before publication, and articles list their sources — see <a href="/legal/about" style="text-decoration:underline">About</a> for where our back catalogue still falls short of that. If you believe something we published is inaccurate, contact ashwin@off-the-tape.com and we will review it promptly.</p>
 <h2>Third-party links and embeds</h2>
 <p>Links and embedded posts lead to services we don't control; their terms govern their content. Embedded content may disappear if the original poster removes it.</p>
 <h2>Copyright / DMCA</h2>
