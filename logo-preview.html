@@ -1,0 +1,109 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>OTT logo preview (temp)</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+body{background:#0A0A0A;color:#fff;font-family:system-ui,sans-serif;margin:20px}
+h2{font-size:14px;letter-spacing:.1em;border-bottom:1px solid #262626;padding-bottom:4px;margin:26px 0 10px}
+.row{display:flex;align-items:center;gap:14px;padding:7px 0;border-bottom:1px solid #1a1a1a}
+.nm{width:150px;font-size:12px;color:#A6A6A6}
+.cell{display:flex;flex-direction:column;align-items:center;gap:3px;width:120px}
+.cell .lbl{font-size:9px;color:#6E6E6E;letter-spacing:.05em}
+.imgs{display:flex;align-items:center;gap:8px;background:#0A0A0A;border:1px dashed #222;padding:5px 10px;border-radius:4px}
+img{object-fit:contain}
+.b{width:44px;height:44px}.s{width:18px;height:18px}
+.dead{color:#FF1F3D;font-size:10px}
+</style></head><body>
+<h1 style="font-size:16px">Logo preview — every mark over the site background (#0A0A0A)</h1>
+<div id="out"></div>
+<script>
+const E = i => `https://a.espncdn.com/i/teamlogos/ncaa/500-dark/${i}.png`;
+const P = i => `/api/logo?id=${i}`;
+// [id, name, current, ...candidates]  candidate = [label, url]
+const T = {
+ 'LOVB': [
+  ['latl','LOVB Atlanta','https://www.lovb.com/api/media/file/team-atlanta-256.svg',['proxy-white',P('latl')]],
+  ['laus','LOVB Austin','https://www.lovb.com/api/media/file/team-austin-256.svg',['proxy-white',P('laus')]],
+  ['lhou','LOVB Houston','https://www.lovb.com/api/media/file/team-houston-255.svg',['proxy-white',P('lhou')]],
+  ['lmad','LOVB Madison','https://www.lovb.com/api/media/file/team-madison-254.svg',['proxy-white',P('lmad')]],
+  ['lneb','LOVB Nebraska','https://www.lovb.com/api/media/file/team-nebraska-251.svg',['proxy-white',P('lneb')]],
+  ['lsf','SF Signal','https://www.lovb.com/api/media/file/sf_glyph_black_64.svg',['proxy-white',P('lsf')]],
+  ['lslc','LOVB Salt Lake','https://www.lovb.com/api/media/file/team-salt-lake-253.svg',['proxy-white',P('lslc')]]
+ ],
+ 'MLV': [
+  ['fury','Columbus Fury','https://en.wikipedia.org/wiki/Special:FilePath/ColumbusFury.png'],
+  ['ign','Indy Ignite','https://en.wikipedia.org/wiki/Special:FilePath/Indy_Ignite.png'],
+  ['nova','Omaha Supernovas','https://en.wikipedia.org/wiki/Special:FilePath/OmahaSupernovas.png'],
+  ['pulse','Dallas Pulse','https://unavatar.io/twitter/dallaspulsevb',['wiki-png','https://en.wikipedia.org/wiki/Special:FilePath/Dallas_Pulse.png']],
+  ['rise','Grand Rapids Rise','https://en.wikipedia.org/wiki/Special:FilePath/GrandRapidsRise.png'],
+  ['sd','San Diego Mojo','https://en.wikipedia.org/wiki/Special:FilePath/SanDiegoMojo.png'],
+  ['thr','Vegas Thrill','https://en.wikipedia.org/wiki/Special:FilePath/VegasThrill.png'],
+  ['valk','Orlando Valkyries','https://en.wikipedia.org/wiki/Special:FilePath/OrlandoValkyries.png'],
+  ['vibe','Atlanta Vibe','https://en.wikipedia.org/wiki/Special:FilePath/AtlantaVibe.png']
+ ],
+ 'NCAA W': [
+  ['asu','Arizona State','https://commons.wikimedia.org/wiki/Special:FilePath/ASU_Athletics_Logo.svg'],
+  ['bay','Baylor','https://commons.wikimedia.org/wiki/Special:FilePath/Baylor_Athletics_logo.svg',['espn-dark',E(239)]],
+  ['byu','BYU','https://commons.wikimedia.org/wiki/Special:FilePath/BYU_Cougars_logo.svg'],
+  ['col','Colorado','https://commons.wikimedia.org/wiki/Special:FilePath/Colorado_Buffaloes_alternate_logo.svg',['espn-dark',E(38)]],
+  ['crei','Creighton','https://commons.wikimedia.org/wiki/Special:FilePath/Creighton_Bluejays_wordmark.svg',['espn-dark',E(156)]],
+  ['fla','Florida','https://commons.wikimedia.org/wiki/Special:FilePath/Florida_Gators_script_logo.svg',['espn-dark',E(57)]],
+  ['iu','Indiana','https://commons.wikimedia.org/wiki/Special:FilePath/Indiana_Hoosiers_logo.svg'],
+  ['ku','Kansas','https://commons.wikimedia.org/wiki/Special:FilePath/Kansas_Jayhawks_1946_logo.svg'],
+  ['lou','Louisville','https://commons.wikimedia.org/wiki/Special:FilePath/Louisville_Cardinals_wordmark.svg',['espn-dark',E(97)]],
+  ['minn','Minnesota','https://commons.wikimedia.org/wiki/Special:FilePath/Minnesota_Golden_Gophers_logo.svg',['espn-dark',E(135)]],
+  ['neb','Nebraska','https://commons.wikimedia.org/wiki/Special:FilePath/Nebraska_Cornhuskers_logo.svg'],
+  ['ore','Oregon','https://commons.wikimedia.org/wiki/Special:FilePath/Oregon_Ducks_logo.svg'],
+  ['pitt','Pittsburgh','https://commons.wikimedia.org/wiki/Special:FilePath/Pitt_athletics_logo_2016.svg',['espn-dark',E(221)]],
+  ['psu','Penn State','https://commons.wikimedia.org/wiki/Special:FilePath/Penn_State_Athletics_wordmark.svg',['espn-dark',E(213)],['proxy-white',P('psu')]],
+  ['pur','Purdue','https://commons.wikimedia.org/wiki/Special:FilePath/Purdue_Boilermakers_logo.svg'],
+  ['smu','SMU','https://commons.wikimedia.org/wiki/Special:FilePath/SMU_Mustang_logo.svg'],
+  ['stan','Stanford','https://commons.wikimedia.org/wiki/Special:FilePath/Stanford_Cardinal_logo.svg'],
+  ['tamu','Texas A&M','https://commons.wikimedia.org/wiki/Special:FilePath/Texas_A%26M_Aggies_Primary_Logo_(2021-Present).png',['espn-dark',E(245)]],
+  ['tcu','TCU','https://commons.wikimedia.org/wiki/Special:FilePath/TCU_Horned_Frogs_logo.svg',['espn-dark',E(2628)],['proxy-white',P('tcu')]],
+  ['tenn','Tennessee','https://commons.wikimedia.org/wiki/Special:FilePath/Tennessee_Volunteers_logo.svg'],
+  ['tex','Texas','https://commons.wikimedia.org/wiki/Special:FilePath/Texas_Longhorns_logo.svg'],
+  ['uk','Kentucky','https://commons.wikimedia.org/wiki/Special:FilePath/Kentucky_Wildcats_logo.svg',['espn-dark',E(96)]],
+  ['unc','North Carolina','https://commons.wikimedia.org/wiki/Special:FilePath/North_Carolina_Tar_Heels_logo.svg',['espn-dark',E(153)]],
+  ['usc','USC','https://commons.wikimedia.org/wiki/Special:FilePath/USC_Trojans_logo.svg'],
+  ['wis','Wisconsin','https://commons.wikimedia.org/wiki/Special:FilePath/Wisconsin_Badgers_logo.svg']
+ ],
+ 'NCAA M': [
+  ['bab','Belmont Abbey','https://commons.wikimedia.org/wiki/Special:FilePath/Belmont_Abbey_Crusaders_logo.png',['espn-dark',E(2058)]],
+  ['bsu','Ball State','https://upload.wikimedia.org/wikipedia/en/e/e4/Ball_State_Cardinals_logo.svg'],
+  ['byum','BYU','https://commons.wikimedia.org/wiki/Special:FilePath/BYU_Cougars_logo.svg'],
+  ['csun','CSUN','https://commons.wikimedia.org/wiki/Special:FilePath/Cal_State_Northridge_Matadors_logo.svg',['espn-dark',E(2463)]],
+  ['gcu','Grand Canyon','https://commons.wikimedia.org/wiki/Special:FilePath/Grand_Canyon_Antelopes_logo.svg'],
+  ['haw','Hawaiʻi','https://commons.wikimedia.org/wiki/Special:FilePath/Hawaii_Warriors_logo.svg',['espn-dark',E(62)]],
+  ['lbsu','Long Beach State','https://commons.wikimedia.org/wiki/Special:FilePath/Long_Beach_State_Athletics_logo.svg',['espn-dark',E(299)]],
+  ['lew','Lewis','https://commons.wikimedia.org/wiki/Special:FilePath/Lewis_University_Flyers%27_Emblem.png'],
+  ['lin','Lindenwood','https://commons.wikimedia.org/wiki/Special:FilePath/Lindenwood_Lions_logo.svg',['espn-dark',E(2815)]],
+  ['luc','Loyola Chicago','https://commons.wikimedia.org/wiki/Special:FilePath/Loyola_Ramblers_wordmark.svg',['espn-dark',E(2350)]],
+  ['mck','McKendree','https://commons.wikimedia.org/wiki/Special:FilePath/McKendree_Bearcats_logo.png',['espn-dark',E(2816)]],
+  ['njit','NJIT','https://commons.wikimedia.org/wiki/Special:FilePath/NJIT_Highlanders_wordmark.svg',['espn-dark',E(2885)]],
+  ['osu','Ohio State','https://commons.wikimedia.org/wiki/Special:FilePath/Ohio_State_Buckeyes_logo.svg'],
+  ['pepp','Pepperdine','https://commons.wikimedia.org/wiki/Special:FilePath/Pepperdine_Waves_logo.svg',['espn-dark',E(2492)]],
+  ['psum','Penn State','https://commons.wikimedia.org/wiki/Special:FilePath/Penn_State_Athletics_wordmark.svg',['espn-dark',E(213)],['proxy-white',P('psum')]],
+  ['stanm','Stanford','https://commons.wikimedia.org/wiki/Special:FilePath/Stanford_Cardinal_logo.svg'],
+  ['uci','UC Irvine','https://commons.wikimedia.org/wiki/Special:FilePath/UC_Irvine_Anteaters_logo.svg',['espn-dark',E(300)]],
+  ['ucla','UCLA','https://commons.wikimedia.org/wiki/Special:FilePath/UCLA_Bruins_script.svg'],
+  ['ucsb','UC Santa Barbara','https://commons.wikimedia.org/wiki/Special:FilePath/UC_Santa_Barbara_Gauchos_logo.svg',['espn-dark',E(2540)]],
+  ['ucsd','UC San Diego','https://commons.wikimedia.org/wiki/Special:FilePath/UC_San_Diego_Tritons_logo.svg',['espn-dark',E(28)]],
+  ['uscm','USC','https://commons.wikimedia.org/wiki/Special:FilePath/USC_Trojans_logo.svg']
+ ]
+};
+let html='';
+for(const lg in T){
+  html+=`<h2>${lg}</h2>`;
+  for(const t of T[lg]){
+    const [id,name,cur,...cands]=t;
+    html+=`<div class="row"><span class="nm">${id} · ${name}</span>`;
+    html+=`<span class="cell"><span class="imgs"><img class="b" src="${cur}" onerror="this.outerHTML='<span class=dead>DEAD</span>'"><img class="s" src="${cur}"></span><span class="lbl">CURRENT</span></span>`;
+    for(const [lbl,u] of cands){
+      html+=`<span class="cell"><span class="imgs"><img class="b" src="${u}" onerror="this.outerHTML='<span class=dead>DEAD</span>'"><img class="s" src="${u}"></span><span class="lbl">${lbl.toUpperCase()}</span></span>`;
+    }
+    html+=`</div>`;
+  }
+}
+document.getElementById('out').innerHTML=html;
+</script>
+</body></html>
