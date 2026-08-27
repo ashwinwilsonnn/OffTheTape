@@ -9,9 +9,10 @@
 //     those brands use on their own dark surfaces. No chips, no backgrounds. Known ids
 //     only (not an open proxy), CDN-cached a week.
 //
-//   ?mode=audit-teams | audit-espn | audit-lovb [&ids=a,b] — TEMPORARY diagnostics used
-//     to build and verify the logo fix (existence + visibility analysis, pure-Node PNG
-//     decode, SVG fill analysis, ESPN dark-variant matching). Strip after the fix settles.
+//   ?mode=audit-teams | audit-espn | audit-lovb | audit-photos [&ids=a,b] — TEMPORARY
+//     diagnostics used to build and verify the logo/photo fixes (existence + visibility
+//     analysis, pure-Node PNG decode, SVG fill analysis, ESPN dark-variant matching).
+//     Strip after the fix settles.
 const zlib = require('zlib');
 const { supaGet } = require('./_supa.js');
 
@@ -210,6 +211,15 @@ async function audit(req, res) {
         lines.push(...rows);
         } catch (e) { lines.push(`${lg}\tLEAGUE-FAIL ${String(e && e.message || e).slice(0, 120)}`); }
       }
+    } else if (mode === 'photos') {
+      // every live article cover — a dead one silently falls back and nobody notices
+      const arts = await supaGet('articles?select=id,status,photo_url&status=in.(published,draft)&order=id');
+      const rows = await pool(arts, async a => {
+        if (!a.photo_url) return `${a.id}\t${a.status}\tNO-PHOTO`;
+        const p = await probe(a.photo_url);
+        return `${a.id}\t${a.status}\thttp=${p.status}\t${p.ct.split(';')[0]}\t${p.buf ? p.buf.length : 0}b`;
+      }, 6);
+      lines.push(...rows);
     } else if (mode === 'lovb') {
       const lovb = teams.filter(t => t.league === 'lovb');
       for (const t of lovb) {
