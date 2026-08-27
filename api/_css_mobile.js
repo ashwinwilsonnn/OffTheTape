@@ -131,4 +131,20 @@ module.exports = `
   .tagrow{gap:9px}
   .tagrow a{padding:9px 12px}
 }
+
+/* ---- logos sit directly on the dark ground (27 Aug) ----
+   Every mark in teams.logo_url now has a dark-safe variant — LOVB and the navy/purple
+   wordmarks come recolored white through /api/logo, dark college marks moved to ESPN's
+   dark-background CDN — so the white plates some slots painted behind logos are gone.
+   They were the only white rectangles on the site, and a white-recolored mark inside a
+   white chip would vanish exactly the way black-on-black did. The floating cover badge
+   (.pl) keeps a plate for separation from photos, but it is the panel grey, not white,
+   and its fallback monogram flips to light type to stay readable on it. */
+.tklead img{background:none;border-radius:0;padding:0}
+.plt{background:none;border-radius:0;padding:2px}
+.rail .rlg{background:none;padding:1px}
+.hubhero .lg{background:none;border-radius:0;padding:4px}
+.qn .qlg img{background:none;border-radius:0;padding:0}
+.pl{background:var(--k1);border:1px solid var(--ln)}
+.pl .mg{color:var(--w)}
 `;
