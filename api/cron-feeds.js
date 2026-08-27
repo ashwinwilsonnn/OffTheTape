@@ -1,8 +1,7 @@
 // GET /api/cron-feeds — the score pipeline for every league, in one function.
 // Each adapter is isolated: a failing feed reports its error and the others still write.
 // Writes rows tagged with `source` so feed data never clobbers hand-entered rows.
-// It UPSERTS on (source, mkey) so the board never blinks empty between runs, and it is safe
-// to call every minute — see the gate at the bottom.
+// PREVIEW MODE (no writes) unless the caller is authorised AND SUPABASE_SERVICE_ROLE_KEY is set.
 const { supaGet, supaWrite, ok, fail } = require('./_supa.js');
 const DATA = require('./_data.js');
 // The poller now writes the same fixture token the board reads, so it can UPSERT rather than
@@ -24,6 +23,13 @@ function dayLabel(isoDate) {
   return new Date(isoDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Chicago' }).toUpperCase().replace(/,\s/g, ', ');
 }
 const ctTime = isoDate => new Date(isoDate).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago' }) + ' CT';
+// Scheduled-time guard: ESPN marks a TBD start with timeValid:false and a midnight
+// placeholder timestamp. "12:00 AM CT" on the board is that placeholder leaking through,
+// never a real first serve — show TBD instead. Applied to every feed's scheduled rows.
+const schedTime = (isoDate, timeValid) => {
+  const t = ctTime(isoDate);
+  return timeValid === false || t === '12:00 AM CT' ? 'TBD' : t;
+};
 function inWindow(isoDate) {
   const t = new Date(isoDate).getTime();
   if (!t) return false;
@@ -99,7 +105,7 @@ async function espn(sportPath, league_key, league) {
     const b_name = h ? up(h.team.abbreviation || h.team.shortDisplayName) : 'TBA';
     return {
       day_label, league_key, league,
-      status: done ? 'FINAL' : live ? up(st.shortDetail || st.description || 'LIVE') : ctTime(ev.date),
+      status: done ? 'FINAL' : live ? up(st.shortDetail || st.description || 'LIVE') : schedTime(ev.date, c && c.timeValid),
       live: live ? 1 : 0,
       network: net || null,
       venue: (c && c.venue && c.venue.fullName) || null,
@@ -128,7 +134,7 @@ async function lovb() {
     const an = nameOf(g.awayTeam || g.away || g.teamB), bn = nameOf(g.homeTeam || g.home || g.teamA);
     return {
       day_label: dayLabel(when), league_key: 'lovb', league: 'LOVB',
-      status: ctTime(when),
+      status: schedTime(when),
       // The venue used to be written into `network`, because there was no venue column and
       // the adapter had nowhere else to put it. That is why 'AT&T STADIUM' was sitting on the
       // board where 'FS2' belongs. LOVB's API does not publish a broadcaster, so network stays
@@ -172,7 +178,7 @@ async function fivb() {
     const done = !!parts;
     return {
       day_label: dayLabel(m.MatchDateTimeUTC), league_key: 'intl', league: 'FIVB',
-      status: done ? 'FINAL' : ctTime(m.MatchDateTimeUTC), network: null, venue: null,
+      status: done ? 'FINAL' : schedTime(m.MatchDateTimeUTC), network: null, venue: null,
       a_team: null, a_name: up(m.TeamAName), a_score: done ? Number(parts[1]) : null,
       a_win: done && Number(parts[1]) > Number(parts[2]) ? 1 : 0,
       b_team: null, b_name: up(m.TeamBName), b_score: done ? Number(parts[2]) : null, sets: null,
@@ -217,7 +223,7 @@ async function mlv() {
     const an = up(c[ciAway]), bn = up(c[ciHome]);
     return {
       day_label: dayLabel(c[ciDate]), league_key: 'mlv', league: 'MLV',
-      status: done ? 'FINAL' : ctTime(c[ciDate]), network: null, venue: null,
+      status: done ? 'FINAL' : schedTime(c[ciDate]), network: null, venue: null,
       a_team: resolveTeam('mlv', an), a_name: an, a_score: done ? aw : null, a_win: done && aw > hw ? 1 : 0,
       b_team: resolveTeam('mlv', bn), b_name: bn, b_score: done ? hw : null, sets: null,
       mkey: TK.matchKey(normDay(dayLabel(c[ciDate])).dk, 'mlv', resolveTeam('mlv', an), an, resolveTeam('mlv', bn), bn)
@@ -242,10 +248,13 @@ const FEEDS = [
 ];
 const inSeason = f => !f.months || f.months.includes(Number(new Date().toLocaleString('en-US', { timeZone: 'America/Chicago', month: 'numeric' })));
 
-// This endpoint writes the whole board with the service-role key. It used to have no
-// authentication at all — anyone who guessed the path could rewrite it, or hold it open and
-// bill us for five upstream fetches a call. Vercel Cron sends `Authorization: Bearer
-// $CRON_SECRET`, so a matching secret is the fast path.
+// This endpoint deletes and rewrites the entire `matches` table with the service-role key, and
+// it had no authentication of any kind — anyone who guessed the path could rewrite the board,
+// or simply hold it open and bill us for five upstream fetches a call. Vercel Cron sends
+// `Authorization: Bearer $CRON_SECRET`, so that is the check.
+//
+// Fail-safe: no CRON_SECRET set means no writes at all, only the preview report. A missing
+// secret must never mean "let everyone in".
 function secretMatches(req) {
   const want = process.env.CRON_SECRET;
   if (!want) return false;
@@ -317,7 +326,7 @@ module.exports = async (req, res) => {
         // around them, so every run opened a gap of a few hundred milliseconds where the board
         // had no rows. Once a day that is invisible; every minute it is a flicker somebody
         // eventually hits. Rows that have genuinely dropped out of the feed window are removed
-        // afterwards, by mkey, so nothing is ever deleted before its replacement exists.
+        // afterwards, by name, so nothing is ever deleted before its replacement exists.
         const keyed = rows.filter(r => r.mkey);
         if (keyed.length) await supaWrite('matches', 'POST', keyed, key, 'resolution=merge-duplicates');
         const keep = keyed.map(r => `"${r.mkey}"`).join(',');
