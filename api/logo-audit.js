@@ -4,6 +4,7 @@
 //   ?mode=teams (default) — audit current logo_url of every team
 //   ?mode=espn            — match NCAA teams to ESPN ids, probe + analyze 500-dark PNGs
 //   ?mode=lovb            — probe LOVB white-variant URLs + Dallas Pulse wiki candidates
+//   ?ids=a,b,c            — limit to these team ids (gentler concurrency for 429 retries)
 // Plain-text one line per finding, built to be read verbatim. Remove after the logo fix.
 const zlib = require('zlib');
 const { supaGet } = require('./_supa.js');
@@ -131,18 +132,22 @@ async function pool(items, fn, n) {
 
 module.exports = async (req, res) => {
   const mode = (req.query && req.query.mode) || 'teams';
+  const only = req.query && req.query.ids ? String(req.query.ids).split(',') : null;
   const lines = [];
   try {
-    const teams = await supaGet('teams?select=id,name,league,logo_url&order=league,id');
+    let teams = await supaGet('teams?select=id,name,league,logo_url&order=league,id');
+    if (only) teams = teams.filter(t => only.includes(t.id));
     if (mode === 'teams') {
       const rows = await pool(teams, async t => {
         const p = await probe(t.logo_url);
         return `${t.id}\t${t.league}\t${analyze(p, t.logo_url)}`;
-      }, 8);
+      }, only ? 2 : 8);
       lines.push(...rows);
     } else if (mode === 'espn') {
       for (const [lg, path] of [['ncaaw', 'womens-college-volleyball'], ['ncaam', 'mens-college-volleyball']]) {
-        const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/volleyball/${path}/teams?limit=500`, { headers: UA });
+        try {
+        // no custom UA here — ESPN's API serves plain fetches but bot-walls this UA string
+        const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/volleyball/${path}/teams?limit=500`);
         const data = await r.json();
         const list = (((data.sports || [])[0] || {}).leagues || [])[0];
         const eteams = ((list && list.teams) || []).map(x => x.team);
@@ -158,6 +163,7 @@ module.exports = async (req, res) => {
           return `${t.id}\t${lg}\tespn=${eid}\t${pick ? pick.u + ' ' + analyze(pick.p) : 'NO-CDN-LOGO'}`;
         }, 8);
         lines.push(...rows);
+        } catch (e) { lines.push(`${lg}\tLEAGUE-FAIL ${String(e && e.message || e).slice(0, 120)}`); }
       }
     } else if (mode === 'lovb') {
       const lovb = teams.filter(t => t.league === 'lovb');
