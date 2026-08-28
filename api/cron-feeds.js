@@ -16,8 +16,11 @@ const pad = n => String(n).padStart(2, '0');
 const iso = d => `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 const compact = d => iso(d).replace(/-/g, '');
 function dayLabel(isoDate) {
-  const d = new Date(isoDate), now = new Date();
-  const diff = Math.floor((new Date(d).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / 864e5);
+  // Compare CALENDAR DAYS IN CENTRAL TIME on both sides. The old version diffed days in the
+  // server's clock (UTC) but printed the weekday in Chicago, so a 7:30 PM CT match crossed
+  // UTC midnight and the same evening's slate split between 'TOMORROW' and 'FRI, AUG 28'.
+  const day = d => new Date(d).toLocaleDateString('en-CA', { timeZone: 'America/Chicago' });
+  const diff = Math.round((new Date(day(isoDate)) - new Date(day(Date.now()))) / 864e5);
   if (diff === 0) return 'TODAY';
   if (diff === 1) return 'TOMORROW';
   return new Date(isoDate).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Chicago' }).toUpperCase().replace(/,\s/g, ', ');
@@ -328,7 +331,11 @@ module.exports = async (req, res) => {
         // eventually hits. Rows that have genuinely dropped out of the feed window are removed
         // afterwards, by name, so nothing is ever deleted before its replacement exists.
         const keyed = rows.filter(r => r.mkey);
-        if (keyed.length) await supaWrite('matches', 'POST', keyed, key, 'resolution=merge-duplicates');
+        // on_conflict names the unique index the upsert must merge on. Without it PostgREST
+        // merges on the PRIMARY KEY (id) only, so the second-ever poll over existing rows
+        // died with 409 "(source, mkey) already exists" — the first re-poll after the feed
+        // healed was the first time any row it wrote already existed.
+        if (keyed.length) await supaWrite('matches?on_conflict=source,mkey', 'POST', keyed, key, 'resolution=merge-duplicates');
         const keep = keyed.map(r => `"${r.mkey}"`).join(',');
         await supaWrite(
           keep ? `matches?source=eq.${f.key}&mkey=not.in.(${encodeURIComponent(keep)})`
