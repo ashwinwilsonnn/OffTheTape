@@ -25,6 +25,13 @@ const art = id => ARTICLES.find(x => x.id === id) || null;
 
 function tlogo(t, px) { return `<img src="${t.img}" alt="" style="width:${px}px;height:${px}px;object-fit:contain" onerror="${die}"><span class="mfb" style="width:${px}px;height:${px}px;background:${t.c1};border-radius:50%;font-size:${Math.round(px * .34)}px">${t.s}</span>`; }
 function tlg(t) { return `<span class="tklg"><img src="${t.img}" alt="" onerror="${die}"><span class="mfb" style="background:${t.c1}"></span></span>`; }
+// Feed-supplied artwork for a side with no tracked team id — ESPN ships a logo for every
+// scoreboard competitor. Try the dark-background variant first, fall back to the stored
+// default, then to a neutral dot, so an untracked opponent never renders bare.
+const FEEDFB = "if(!this.dataset.f){this.dataset.f=1;this.src=this.getAttribute('data-d')}else{this.classList.add('dead')}";
+const darkv = u => u.replace('/i/teamlogos/ncaa/500/', '/i/teamlogos/ncaa/500-dark/');
+function tlgu(u) { return u ? `<span class="tklg"><img src="${darkv(u)}" data-d="${u}" alt="" onerror="${FEEDFB}"><span class="mfb" style="background:var(--ln)"></span></span>` : ''; }
+function tlogou(u, px) { return u ? `<img src="${darkv(u)}" data-d="${u}" alt="" style="width:${px}px;height:${px}px;object-fit:contain" onerror="${FEEDFB}"><span class="mfb" style="width:${px}px;height:${px}px;background:var(--ln);border-radius:50%;font-size:0"></span>` : ''; }
 
 // ---------- dates ----------
 const MON = { JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12 };
@@ -67,8 +74,8 @@ function toMatch(m) {
   return {
     day: nd.disp, dk: nd.dk, sort: nd.sort || 0, st: m.status, lg: m.league, lgk: m.league_key,
     net: m.network, live: !!m.live, sets: Array.isArray(m.sets) ? m.sets.join(' · ') : m.sets,
-    a: { t: m.a_team, n: m.a_name, sc: sc(m.a_score), w: !!m.a_win },
-    b: { t: m.b_team, n: m.b_name, sc: sc(m.b_score), w: done ? !m.a_win : false }
+    a: { t: m.a_team, n: m.a_name, sc: sc(m.a_score), w: !!m.a_win, lg: m.a_logo || null },
+    b: { t: m.b_team, n: m.b_name, sc: sc(m.b_score), w: done ? !m.a_win : false, lg: m.b_logo || null }
   };
 }
 
@@ -255,8 +262,8 @@ function tickerHTML(MATCHES){
   h+=`<a class="tkc" href="${m.box&&m.mkey?`/match/${attr(m.mkey)}`:'/scores'}" draggable="false">
    <span class="tl"><span class="tkdayl ${m.live?'live':''}">${dayl}</span><span class="tklead">${L&&L.img?`<img src="${L.img}" alt="" draggable="false" onerror="${die}">`:''}${m.lg}</span></span>
    <span class="tkbody"><span class="tkteams">
-    <span class="rw ${done&&m.a.w?'win':done&&!m.a.w?'los':''}">${A?tlg(A):''}<span>${an}</span>${A&&A.rk?`<span class="rec">NO.${A.rk}</span>`:''}${done?`<span class="sc">${m.a.sc}</span>`:''}</span>
-    <span class="rw ${done&&m.b.w?'win':done&&!m.b.w?'los':''}">${B?tlg(B):''}<span>${bn}</span>${B&&B.rk?`<span class="rec">NO.${B.rk}</span>`:''}${done?`<span class="sc">${m.b.sc}</span>`:''}</span>
+    <span class="rw ${done&&m.a.w?'win':done&&!m.a.w?'los':''}">${A?tlg(A):tlgu(m.a.lg)}<span>${an}</span>${A&&A.rk?`<span class="rec">NO.${A.rk}</span>`:''}${done?`<span class="sc">${m.a.sc}</span>`:''}</span>
+    <span class="rw ${done&&m.b.w?'win':done&&!m.b.w?'los':''}">${B?tlg(B):tlgu(m.b.lg)}<span>${bn}</span>${B&&B.rk?`<span class="rec">NO.${B.rk}</span>`:''}${done?`<span class="sc">${m.b.sc}</span>`:''}</span>
    </span>${done?'':`<span class="tktime"><b>${m.st}</b>${m.net?`<i>${m.net}</i>`:''}</span>`}</span></a>`});
  return h+h;
 }
@@ -385,11 +392,11 @@ function pgHub(k,tab){
 }
 function mcard(m){
  const A=m.a.t?TEAMS[m.a.t]:null,B=m.b.t?TEAMS[m.b.t]:null;
- const row=(x,X,l)=>`<div class="tr ${l?'los':''}">${X?tlogo(X,22):''}<span>${X?X.n:x.n}</span><span class="rec">${X&&X.rk?'NO. '+X.rk:''}</span><span class="sc">${x.sc!==undefined?x.sc:''}</span></div>`;
+ const row=(x,X,l)=>`<div class="tr ${l?'los':''}">${X?tlogo(X,22):tlogou(x.lg,22)}<span>${X?X.n:x.n}</span><span class="rec">${X&&X.rk?'NO. '+X.rk:''}</span><span class="sc">${x.sc!==undefined?x.sc:''}</span></div>`;
  const done=m.st==='FINAL';
  // Only a link when there is a box score behind it. A click that lands on an empty page is
  // worse than no link, so the affordance appears with the data and not before.
- const inner=`<div class="st"><span>${m.lg} · ${m.day}</span><span class="${m.live?'live':''}">${m.live?'● LIVE':m.st}</span></div>
+ const inner=`<div class="st"><span>${m.lg} · ${m.day}</span><span class="${m.live?'live':''}">${m.live?'● LIVE':done?m.st:(m.st+(m.net?' · '+m.net:''))}</span></div>
  ${row(m.a,A,done&&!m.a.w)}${row(m.b,B,done&&!m.b.w)}
  ${m.sets?`<div class="sets">${m.sets}</div>`:''}`;
  if(m.box&&m.mkey)return `<a class="mcard mlink" href="/match/${attr(m.mkey)}">${inner}<div class="mbox">FULL BOX SCORE <span>›</span></div></a>`;
