@@ -334,12 +334,32 @@ module.exports = async (req, res) => {
         // had no rows. Once a day that is invisible; every minute it is a flicker somebody
         // eventually hits. Rows that have genuinely dropped out of the feed window are removed
         // afterwards, by name, so nothing is ever deleted before its replacement exists.
-        const keyed = rows.filter(r => r.mkey);
+        // Enrichment columns can be hand-filled by the data desk when the feed lacks them
+        // (sets is the standing case — USC-ASU 29 Aug went FINAL with no ESPN linescores).
+        // A merge-upsert overwrites every column it is handed, nulls included, so handing
+        // it a null would wipe those patches on the very next poll. Strip null enrichments
+        // from each row instead: a column absent from the payload is left untouched on
+        // merge. PostgREST requires uniform keys per request, so batch rows by the shape
+        // that remains. A real value from the feed still always wins over a hand patch.
+        const SOFT = ['sets', 'network', 'a_logo', 'b_logo'];
+        const keyed = rows.filter(r => r.mkey).map(r => {
+          const o = { ...r };
+          for (const c of SOFT) if (o[c] == null) delete o[c];
+          return o;
+        });
         // on_conflict names the unique index the upsert must merge on. Without it PostgREST
         // merges on the PRIMARY KEY (id) only, so the second-ever poll over existing rows
         // died with 409 "(source, mkey) already exists" — the first re-poll after the feed
         // healed was the first time any row it wrote already existed.
-        if (keyed.length) await supaWrite('matches?on_conflict=source,mkey', 'POST', keyed, key, 'resolution=merge-duplicates');
+        const batches = {};
+        for (const r of keyed) {
+          const shape = Object.keys(r).sort().join(',');
+          if (!batches[shape]) batches[shape] = [];
+          batches[shape].push(r);
+        }
+        for (const b of Object.values(batches)) {
+          await supaWrite('matches?on_conflict=source,mkey', 'POST', b, key, 'resolution=merge-duplicates');
+        }
         const keep = keyed.map(r => `"${r.mkey}"`).join(',');
         await supaWrite(
           keep ? `matches?source=eq.${f.key}&mkey=not.in.(${encodeURIComponent(keep)})`
