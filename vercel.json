@@ -158,7 +158,7 @@
     },
     {
       "path": "/api/cron-feeds",
-      "schedule": "50 14 * * *"
+      "schedule": "30 4 * * *"
     }
   ]
 }
