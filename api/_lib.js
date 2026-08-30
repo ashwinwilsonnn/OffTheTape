@@ -61,7 +61,7 @@ const safeColor = c => /^#[0-9a-f]{3,8}$|^(rgb|hsl)a?\([\d\s.,%/]+\)$|^[a-z]{3,2
 const jsonForScript = v => JSON.stringify(v)
   .replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')
   .replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
-const stripEmoji = s => String(s || '').replace(/\s*\p{Extended_Pictographic}️?\s*$/u, '');
+const stripEmoji = s => String(s || '').replace(/\s*\p{Extended_Pictographic}\ufe0f?\s*$/u, '');
 const die = "this.classList.add('dead')";
 
 // ---------- articles: fetch + normalise into the shape the prototype renderers expect ----------
@@ -126,9 +126,13 @@ const TK = require('./_teamkey.js');
 // release on GitHub. A hostile team name would have been sitewide script. Escaped here, before
 // the renderer sees the row; league_key and the team ids stay raw because they are lookup keys
 // that are never printed.
+// Feed logo URLs render inside src attributes; only ESPN's CDN is expected, so anything
+// else is dropped rather than escaped-and-hoped.
+const feedLogoUrl = u => (typeof u === 'string' && /^https:\/\/a\.espncdn\.com\//.test(u) ? esc(u) : null);
 const escMatch = m => ({
   ...m,
   day_label: esc(m.day_label ?? ''), status: esc(m.status ?? ''), league: esc(m.league ?? ''),
+  a_logo: feedLogoUrl(m.a_logo), b_logo: feedLogoUrl(m.b_logo),
   network: m.network == null ? m.network : esc(m.network),
   a_name: esc(m.a_name ?? ''), b_name: esc(m.b_name ?? ''),
   a_score: m.a_score == null ? m.a_score : esc(m.a_score),
