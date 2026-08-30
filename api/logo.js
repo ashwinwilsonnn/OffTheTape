@@ -9,12 +9,12 @@
 //     those brands use on their own dark surfaces. No chips, no backgrounds. Known ids
 //     only (not an open proxy), CDN-cached a week.
 //
-//   ?mode=audit-teams | audit-espn | audit-lovb | audit-photos [&ids=a,b] — TEMPORARY
-//     diagnostics used to build and verify the logo/photo fixes (existence + visibility
-//     analysis, pure-Node PNG decode, SVG fill analysis, ESPN dark-variant matching).
-//     Strip after the fix settles.
+//   ?mode=audit-teams | audit-espn | audit-lovb | audit-photos | audit-backfill [&ids=a,b]
+//     — TEMPORARY diagnostics used to build and verify the logo/photo fixes (existence +
+//     visibility analysis, pure-Node PNG decode, SVG fill analysis, ESPN dark-variant
+//     matching, feed-logo backfill). Strip after the fix settles.
 const zlib = require('zlib');
-const { supaGet } = require('./_supa.js');
+const { supaGet, supaWrite } = require('./_supa.js');
 
 const SRC = {
   latl: { url: 'https://www.lovb.com/api/media/file/team-atlanta-256.svg' },
@@ -220,6 +220,36 @@ async function audit(req, res) {
         return `${a.id}\t${a.status}\thttp=${p.status}\t${p.ct.split(';')[0]}\t${p.buf ? p.buf.length : 0}b`;
       }, 6);
       lines.push(...rows);
+    } else if (mode === 'backfill') {
+      // ONE-SHOT: fill a_logo/b_logo on existing feed rows whose side has no tracked team,
+      // so untracked opponents get their marks now instead of at the next poll. Keys ESPN's
+      // teams directory by abbreviation — the same string the adapter stores in a_name/b_name.
+      const svc = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!svc) lines.push('NO-SERVICE-KEY');
+      else {
+        const idx = {};
+        for (const path of ['womens-college-volleyball', 'mens-college-volleyball']) {
+          try {
+            const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/volleyball/${path}/teams?limit=500`);
+            const data = await r.json();
+            const list = (((data.sports || [])[0] || {}).leagues || [])[0];
+            for (const x of ((list && list.teams) || [])) {
+              const e = x.team, u = (e.logos && e.logos[0] && e.logos[0].href) || e.logo;
+              if (!u || !String(u).startsWith('https://')) continue;
+              for (const k of [e.abbreviation, e.shortDisplayName, e.location]) if (k) idx[norm(k)] = idx[norm(k)] || u;
+            }
+          } catch (e) { lines.push('teams-list-fail ' + path + ' ' + String(e && e.message || e).slice(0, 60)); }
+        }
+        const rows = await supaGet('matches?select=id,a_team,b_team,a_name,b_name,a_logo,b_logo&source=in.(espn_ncaaw,espn_ncaam)');
+        let n = 0;
+        for (const m of rows) {
+          const patch = {};
+          if (!m.a_team && !m.a_logo && idx[norm(m.a_name)]) patch.a_logo = idx[norm(m.a_name)];
+          if (!m.b_team && !m.b_logo && idx[norm(m.b_name)]) patch.b_logo = idx[norm(m.b_name)];
+          if (Object.keys(patch).length) { await supaWrite(`matches?id=eq.${m.id}`, 'PATCH', patch, svc); n++; lines.push(`patched ${m.id} ${m.a_name}-${m.b_name} ${Object.keys(patch).join(',')}`); }
+        }
+        lines.push(`BACKFILL DONE — ${n} of ${rows.length} rows patched`);
+      }
     } else if (mode === 'lovb') {
       const lovb = teams.filter(t => t.league === 'lovb');
       for (const t of lovb) {

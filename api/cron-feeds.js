@@ -106,8 +106,12 @@ async function espn(sportPath, league_key, league) {
     const a_team = a ? tid(a.team) : null, b_team = h ? tid(h.team) : null;
     const a_name = a ? up(a.team.abbreviation || a.team.shortDisplayName) : 'TBA';
     const b_name = h ? up(h.team.abbreviation || h.team.shortDisplayName) : 'TBA';
+    // ESPN ships a logo for every competitor. Carried so the board can render opponents we
+    // don't track (FSU, USU, UNLV...) with their real mark instead of bare text.
+    const lgo = x => { const u = x && x.team && x.team.logo; return typeof u === 'string' && u.startsWith('https://') ? u : null; };
     return {
       day_label, league_key, league,
+      a_logo: a ? lgo(a) : null, b_logo: h ? lgo(h) : null,
       status: done ? 'FINAL' : live ? up(st.shortDetail || st.description || 'LIVE') : schedTime(ev.date, c && c.timeValid),
       live: live ? 1 : 0,
       network: net || null,
