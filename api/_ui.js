@@ -76,7 +76,24 @@ var die="this.classList.add('dead')";
 
  var auto=!rm,tmr=null,drag=false,sx=0,sl=0,moved=0;
  var half=function(){return tr.scrollWidth/2};
- function loop(){if(auto&&!drag){tk.scrollLeft+=0.55;if(tk.scrollLeft>=half())tk.scrollLeft-=half()}requestAnimationFrame(loop)}
+ /* Speed is pixels per SECOND, not per frame. The old loop added 0.55px per
+    requestAnimationFrame tick, and rAF fires at the monitor's refresh rate — right at 60Hz,
+    double-to-triple speed on the 120-165Hz panels most widescreen monitors run at. Same fix
+    the touch path already carries: scale by elapsed time. A float accumulator does the
+    bookkeeping so sub-pixel steps never get lost to scrollLeft rounding; it resyncs from the
+    real scroll position whenever the user has had the wheel or a drag. */
+ var SPD=32,lt=0,px=null;
+ function loop(t){
+  if(auto&&!drag){
+   var dt=lt?Math.min(64,t-lt):16;
+   if(px===null)px=tk.scrollLeft;
+   px+=SPD*dt/1000;
+   if(px>=half())px-=half();
+   tk.scrollLeft=px;
+  }else px=null;
+  lt=t;
+  requestAnimationFrame(loop);
+ }
  var pause=function(){auto=false;clearTimeout(tmr);tmr=setTimeout(function(){if(!rm)auto=true},3000)};
  tk.addEventListener('pointerdown',function(e){if(e.pointerType!=='mouse')return pause();drag=true;moved=0;sx=e.clientX;sl=tk.scrollLeft;tk.classList.add('dragging');pause()});
  addEventListener('pointermove',function(e){if(drag){var dx=e.clientX-sx;moved=Math.max(moved,Math.abs(dx));tk.scrollLeft=sl-dx}});
