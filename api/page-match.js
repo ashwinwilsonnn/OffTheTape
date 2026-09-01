@@ -122,7 +122,7 @@ ${srcs.length ? `<div class="srcs" style="margin-top:26px"><div class="t">SOURCE
 
 ${rel.length ? `<div class="sect" style="font-size:15px;margin-top:30px">OUR COVERAGE</div><div class="grid3">${rel.map(a => R.acard(a, 'sm')).join('')}</div>` : ''}
 
-<p style="color:var(--mut);font-size:11.5px;margin-top:22px">Box scores are compiled each morning by the OTT Data Desk from the sources listed above. Spot something wrong? ashwin@off-the-tape.com.</p>`;
+<p style="color:var(--mut);font-size:11.5px;margin-top:22px">Box scores are compiled each morning by the OTT Data Desk from the sources listed above. Spot something wrong? help@off-the-tape.com.</p>`;
 
     L.ok(res, L.page({
       title: `${title}${score} — box score — OFF THE TAPE`,

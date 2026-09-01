@@ -471,7 +471,7 @@ function pgArticle(id){
  ${embedsHTML(a.embeds)}
  ${srcs}
  <div class="tagrow"><a href="/hub/${a.lg}">${LEAGUES[a.lg].n.toUpperCase()}</a>${a.t1?`<a href="/team/${a.t1}">${TEAMS[a.t1].n.toUpperCase()}</a>`:''}${a.t2?`<a href="/team/${a.t2}">${TEAMS[a.t2].n.toUpperCase()}</a>`:''}</div>
- <div class="finep">Off The Tape uses AI-assisted production; every article is reviewed and approved before publication. Corrections: ashwin@off-the-tape.com${a.ph?` · Photo: ${a.ph.cr}`:''}</div>
+ <div class="finep">Off The Tape uses AI-assisted production; every article is reviewed and approved before publication. Corrections: help@off-the-tape.com${a.ph?` · Photo: ${a.ph.cr}`:''}</div>
  ${rel.length?`<div class="sect" style="margin-top:34px;font-size:16px">MORE ${LEAGUES[a.lg].n.toUpperCase()}</div><div class="grid3">${rel.map(x=>acard(x,'sm')).join('')}</div>`:''}</div>`;
 }
 function pgNews(){
