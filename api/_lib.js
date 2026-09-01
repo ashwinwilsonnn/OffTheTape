@@ -265,7 +265,7 @@ function nlPopup() {
 function footer() {
   return `<footer><div class="fb">
   <div class="fl"><a href="/legal/terms">TERMS OF USE</a><a href="/legal/privacy">PRIVACY</a><a href="/legal/about">ABOUT</a><a href="/legal/corrections">CORRECTIONS</a><a href="/newsletter">NEWSLETTER</a></div>
-  <span class="fcopy">© 2026 OFF THE TAPE · OFF THE TAPE USES AI-ASSISTED PRODUCTION; EVERY ARTICLE IS REVIEWED AND APPROVED BEFORE PUBLICATION · CORRECTIONS: ASHWIN@OFF-THE-TAPE.COM</span>
+  <span class="fcopy">© 2026 OFF THE TAPE · OFF THE TAPE USES AI-ASSISTED PRODUCTION; EVERY ARTICLE IS REVIEWED AND APPROVED BEFORE PUBLICATION · CORRECTIONS: HELP@OFF-THE-TAPE.COM</span>
 </div></footer>`;
 }
 function searchIndex(arts) {
