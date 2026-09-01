@@ -368,7 +368,7 @@ function pgHub(k,tab){
  if(!tab){
   body=arts.length>2?`<div style="margin-top:18px" class="secmod">${acard(arts[0],'lead')}<div class="stack">${arts.slice(1,3).map(a=>acard(a,'sm')).join('')}</div></div>${arts.length>3?`<div class="grid3" style="margin-top:20px">${arts.slice(3).map(a=>acard(a,'sm')).join('')}</div>`:''}`
    :arts.length?`<div class="grid2" style="margin-top:18px">${arts.map(a=>acard(a)).join('')}</div>`
-   :`<p style="color:var(--ink2);margin-top:20px">No stories in this hub yet — the desk fills it every morning.</p>`;
+   :`<p style="color:var(--ink2);margin-top:20px">Nothing posted in this hub yet — check back soon.</p>`;
  }else if(tab==='scores'){
   const ms=MATCHES.filter(m=>m.lgk===k);
   body=ms.length?`<div class="grid3" style="margin-top:18px">${boardOrder(ms).map(mcard).join('')}</div>`:`<p style="color:var(--ink2);margin-top:20px;font-size:14px">No ${L.n} matches on the board right now. The board fills from the live feed as the season opens.</p>`;
@@ -417,7 +417,7 @@ function pgTeam(id){
  const arts=ARTICLES.filter(a=>a.t1===id||a.t2===id);
  return `<div class="teamrail" style="background:${t.c1}"></div>
  <div class="hubslim" style="margin-top:10px"><span style="width:38px;height:38px;display:grid;place-items:center">${tlogo(t,34)}</span><h1>${t.n}</h1><span class="r">${LEAGUES[t.lg].n.toUpperCase()} ${t.rk?'· NO. '+t.rk+' AVCA':''} · ${t.rec}</span></div>
- ${arts.length?`<div class="grid3" style="margin-top:20px">${arts.map(a=>acard(a,'sm')).join('')}</div>`:`<p style="color:var(--ink2);margin-top:18px;font-size:14px">Every article tagged ${t.s} lands here automatically.</p>`}`;
+ ${arts.length?`<div class="grid3" style="margin-top:20px">${arts.map(a=>acard(a,'sm')).join('')}</div>`:`<p style="color:var(--ink2);margin-top:18px;font-size:14px">Every article about ${t.s} lands here as it publishes.</p>`}`;
 }
 // ---------- native embeds (EMBED STANDARD) ----------
 // Returns the blockquotes plus whichever platform scripts they need, deduped.
