@@ -75,14 +75,37 @@ function resolveTeam(lg, ...cands) {
 }
 
 // ---------- ESPN (NCAA women + men) — same shape, different sport path ----------
-// The bare /scoreboard call only returns the current day. The dates=RANGE param
-// is what gets us the whole forward slate.
+// ESPN stopped accepting a date RANGE (dates=A-B) in late Sep 2026: every range call returns
+// 400, which is why the NCAA W feed sat in "error — espn womens-college-volleyball 400" from
+// 27 Sep and the ticker emptied. A month (dates=YYYYMM) still answers but is capped at 400
+// events, which on the women's side runs out around the 9th. One day at a time is the shape
+// that still works, so the window is fetched day by day and merged.
+// If any day fails after one retry the whole feed throws, so the clean-up DELETE below never
+// runs against a partial slate and no good rows are dropped.
+async function espnDay(sportPath, day) {
+  const u = `https://site.api.espn.com/apis/site/v2/sports/volleyball/${sportPath}/scoreboard?limit=400&dates=${day}`;
+  let r = await fetch(u);
+  if (!r.ok) r = await fetch(u);
+  if (!r.ok) throw new Error(`espn ${sportPath} ${day} ${r.status}`);
+  const j = await r.json();
+  return j.events || [];
+}
 async function espn(sportPath, league_key, league) {
   const now = Date.now();
-  const range = `${compact(new Date(now - WINDOW_BACK * 864e5))}-${compact(new Date(now + WINDOW_FWD * 864e5))}`;
-  const r = await fetch(`https://site.api.espn.com/apis/site/v2/sports/volleyball/${sportPath}/scoreboard?limit=400&dates=${range}`);
-  if (!r.ok) throw new Error(`espn ${sportPath} ${r.status}`);
-  const data = await r.json();
+  const days = [];
+  for (let i = -WINDOW_BACK; i <= WINDOW_FWD; i++) days.push(compact(new Date(now + i * 864e5)));
+  const events = [], seen = new Set();
+  for (let i = 0; i < days.length; i += 5) {           // 5 at a time: polite to ESPN, quick enough
+    const got = await Promise.all(days.slice(i, i + 5).map(d => espnDay(sportPath, d)));
+    for (const evs of got) for (const ev of evs) {
+      const id = ev && (ev.id || ev.uid);
+      if (id && seen.has(id)) continue;
+      if (id) seen.add(id);
+      events.push(ev);
+    }
+  }
+  events.sort((x, y) => new Date(x.date) - new Date(y.date));
+  const data = { events };
   const tid = t => resolveTeam(league_key, t && t.location, t && t.displayName, t && t.shortDisplayName, t && t.abbreviation);
   const mapped = (data.events || []).filter(ev => inWindow(ev.date)).map(ev => {
     const c = ev.competitions && ev.competitions[0];
